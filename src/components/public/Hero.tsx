@@ -1,8 +1,10 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../../context/LanguageContext';
 import { useAccessibility } from '../../context/AccessibilityContext';
+import { useAuth } from '../../context/AuthContext';
 import { speakText } from '../../lib/speech';
 import { Search, AlertTriangle, Calendar, Volume2, ArrowRight, CheckCircle2 } from 'lucide-react';
+import { villageDataService, isSupabaseConfigured } from '../../lib/supabase';
 
 interface HeroProps {
   onNavigate: (page: string) => void;
@@ -10,7 +12,38 @@ interface HeroProps {
 
 export const Hero: React.FC<HeroProps> = ({ onNavigate }) => {
   const { language, t } = useLanguage();
-  const { voiceEnabled } = useAccessibility();
+  const { user } = useAuth();
+
+  const [stats, setStats] = useState({
+    households: 0,
+    compostKg: 0,
+    resolvedPct: 0
+  });
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const [households, composts, reports] = await Promise.all([
+          villageDataService.getHouseholds(),
+          villageDataService.getCompost(),
+          villageDataService.getReports()
+        ]);
+
+        const totalCompost = composts.reduce((sum, c) => sum + (c.compost_produced_kg || 0), 0);
+        const resolved = reports.filter(r => r.status === 'resolved').length;
+        const pct = reports.length > 0 ? Math.round((resolved / reports.length) * 100) : 100;
+
+        setStats({
+          households: households.length,
+          compostKg: totalCompost,
+          resolvedPct: pct
+        });
+      } catch (err) {
+        console.error('Error fetching stats:', err);
+      }
+    };
+    fetchStats();
+  }, []);
 
   const handleVoiceIntroduction = () => {
     const text = language === 'te'
@@ -19,8 +52,18 @@ export const Hero: React.FC<HeroProps> = ({ onNavigate }) => {
     speakText(text, language);
   };
 
+  const handleReportClick = () => {
+    if (user && user.role === 'citizen') {
+      onNavigate('citizen');
+    } else if (user) {
+      onNavigate(user.role);
+    } else {
+      onNavigate('login');
+    }
+  };
+
   return (
-    <section className="relative overflow-hidden bg-gradient-to-b from-forest-50 via-white to-slate-50 py-12 lg:py-16 border-b border-forest-100">
+    <section className="relative overflow-hidden bg-gradient-to-b from-forest-50 via-white to-slate-50 py-10 lg:py-14 border-b border-forest-100">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
           
@@ -47,7 +90,7 @@ export const Hero: React.FC<HeroProps> = ({ onNavigate }) => {
             </p>
 
             {/* Visual Value Checkpoints */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
               <div className="flex items-center gap-2.5 text-slate-700 font-medium text-sm">
                 <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0" />
                 <span>{language === 'te' ? 'తడి చెత్త నుండి నాణ్యమైన కంపోస్ట్ ఎరువు' : 'Wet waste turned into organic farm compost'}</span>
@@ -67,7 +110,7 @@ export const Hero: React.FC<HeroProps> = ({ onNavigate }) => {
             </div>
 
             {/* Action Buttons */}
-            <div className="pt-4 flex flex-wrap gap-3">
+            <div className="pt-2 flex flex-wrap gap-3">
               <button
                 onClick={() => onNavigate('guide')}
                 className="flex items-center gap-2 bg-forest-600 hover:bg-forest-700 text-white font-bold px-6 py-3.5 rounded-xl shadow-md shadow-forest-200 transition group text-base"
@@ -78,7 +121,7 @@ export const Hero: React.FC<HeroProps> = ({ onNavigate }) => {
               </button>
 
               <button
-                onClick={() => onNavigate('citizen')}
+                onClick={handleReportClick}
                 className="flex items-center gap-2 bg-amber-600 hover:bg-amber-700 text-white font-bold px-6 py-3.5 rounded-xl shadow-md shadow-amber-100 transition text-base"
               >
                 <AlertTriangle className="w-5 h-5" />
@@ -86,7 +129,13 @@ export const Hero: React.FC<HeroProps> = ({ onNavigate }) => {
               </button>
 
               <button
-                onClick={() => onNavigate('citizen')}
+                onClick={() => {
+                  if (user) {
+                    onNavigate(user.role);
+                  } else {
+                    onNavigate('login');
+                  }
+                }}
                 className="flex items-center gap-2 bg-white hover:bg-slate-50 text-slate-700 font-bold px-5 py-3.5 rounded-xl border border-slate-300 shadow-sm transition text-base"
               >
                 <Calendar className="w-5 h-5 text-forest-600" />
@@ -95,9 +144,9 @@ export const Hero: React.FC<HeroProps> = ({ onNavigate }) => {
             </div>
           </div>
 
-          {/* Quick Village Bin Visual Card Column */}
+          {/* 2-Bin Household Segregation Guide Card */}
           <div className="lg:col-span-5">
-            <div className="bg-white rounded-2xl p-6 shadow-xl border border-emerald-100 space-y-4">
+            <div className="bg-white rounded-3xl p-6 shadow-xl border border-emerald-100 space-y-4">
               <div className="flex items-center justify-between border-b pb-3">
                 <h3 className="font-extrabold text-slate-800 text-base sm:text-lg">
                   {language === 'te' ? 'ఇంటి వద్ద 2 డబ్బాల సూత్రం' : 'The 2-Bin Household Rule'}
@@ -108,8 +157,8 @@ export const Hero: React.FC<HeroProps> = ({ onNavigate }) => {
               </div>
 
               {/* Wet Bin Card */}
-              <div className="p-4 rounded-xl bg-emerald-50 border-2 border-emerald-500/40 flex items-start gap-3">
-                <div className="w-12 h-12 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-black text-xl flex-shrink-0 shadow">
+              <div className="p-4 rounded-2xl bg-emerald-50 border-2 border-emerald-500/40 flex items-start gap-3">
+                <div className="w-12 h-12 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-black text-xl flex-shrink-0 shadow">
                   🌱
                 </div>
                 <div>
@@ -125,7 +174,7 @@ export const Hero: React.FC<HeroProps> = ({ onNavigate }) => {
               </div>
 
               {/* Dry Bin Card */}
-              <div className="p-4 rounded-xl bg-blue-50 border-2 border-blue-500/40 flex items-start gap-3">
+              <div className="p-4 rounded-2xl bg-blue-50 border-2 border-blue-500/40 flex items-start gap-3">
                 <div className="w-12 h-12 rounded-lg bg-blue-600 text-white flex items-center justify-center font-black text-xl flex-shrink-0 shadow">
                   📦
                 </div>
@@ -141,27 +190,41 @@ export const Hero: React.FC<HeroProps> = ({ onNavigate }) => {
                 </div>
               </div>
 
-              {/* Village Live Impact Counters */}
-              <div className="grid grid-cols-3 gap-2 pt-2 text-center">
-                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
-                  <div className="text-lg font-black text-forest-700">850+</div>
-                  <div className="text-[11px] text-slate-500 font-medium">
-                    {language === 'te' ? 'నమోదైన ఇళ్లు' : 'Households'}
-                  </div>
+              {/* Data Accuracy Counters */}
+              <div className="pt-2">
+                <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                  <span>
+                    {isSupabaseConfigured
+                      ? (language === 'te' ? 'లైవ్ పంచాయతీ రికార్డులు' : 'Live Panchayat Database')
+                      : (language === 'te' ? 'నమూనా డెమో గణాంకాలు' : 'Sample Prototype Data')}
+                  </span>
+                  <span className={`px-1.5 py-0.2 rounded text-[10px] ${isSupabaseConfigured ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}`}>
+                    {isSupabaseConfigured ? 'Connected' : 'Demo Mode'}
+                  </span>
                 </div>
-                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
-                  <div className="text-lg font-black text-emerald-700">420 kg</div>
-                  <div className="text-[11px] text-slate-500 font-medium">
-                    {language === 'te' ? 'కంపోస్ట్ ఎరువు' : 'Compost Ready'}
+
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                    <div className="text-lg font-black text-forest-700">{stats.households}</div>
+                    <div className="text-[11px] text-slate-500 font-medium">
+                      {language === 'te' ? 'నమోదైన ఇళ్లు' : 'Enrolled Houses'}
+                    </div>
                   </div>
-                </div>
-                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
-                  <div className="text-lg font-black text-blue-700">96%</div>
-                  <div className="text-[11px] text-slate-500 font-medium">
-                    {language === 'te' ? 'పరిష్కారం' : 'Resolved'}
+                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                    <div className="text-lg font-black text-emerald-700">{stats.compostKg} kg</div>
+                    <div className="text-[11px] text-slate-500 font-medium">
+                      {language === 'te' ? 'కంపోస్ట్ ఎరువు' : 'Compost Ready'}
+                    </div>
+                  </div>
+                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                    <div className="text-lg font-black text-blue-700">{stats.resolvedPct}%</div>
+                    <div className="text-[11px] text-slate-500 font-medium">
+                      {language === 'te' ? 'పరిష్కారం' : 'Resolution Rate'}
+                    </div>
                   </div>
                 </div>
               </div>
+
             </div>
           </div>
 

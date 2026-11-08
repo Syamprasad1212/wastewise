@@ -4,7 +4,6 @@ import { useAccessibility } from '../../context/AccessibilityContext';
 import { useAuth } from '../../context/AuthContext';
 import {
   Recycle,
-  Languages,
   Eye,
   Menu,
   X,
@@ -14,7 +13,8 @@ import {
   LogOut,
   ShieldAlert,
   HardHat,
-  Home
+  Home,
+  LayoutDashboard
 } from 'lucide-react';
 import { speakText, stopSpeech } from '../../lib/speech';
 
@@ -26,7 +26,7 @@ interface NavbarProps {
 export const Navbar: React.FC<NavbarProps> = ({ currentPage, onNavigate }) => {
   const { language, setLanguage, t } = useLanguage();
   const { isSimpleMode, toggleSimpleMode, voiceEnabled, toggleVoice } = useAccessibility();
-  const { user, role, logout, switchRole } = useAuth();
+  const { user, role, logout } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const handleSpeechToggle = () => {
@@ -41,14 +41,26 @@ export const Navbar: React.FC<NavbarProps> = ({ currentPage, onNavigate }) => {
     }
   };
 
-  const navLinks = [
+  const handleLogout = async () => {
+    await logout();
+    onNavigate('home');
+  };
+
+  // Public Links always visible
+  const publicLinks = [
     { id: 'home', label: t('navHome'), icon: <Home className="w-4 h-4" /> },
     { id: 'guide', label: t('navGuide'), icon: <Recycle className="w-4 h-4" /> },
-    { id: 'awareness', label: t('navAwareness'), icon: <ShieldAlert className="w-4 h-4" /> },
-    { id: 'citizen', label: t('navCitizenPortal'), icon: <User className="w-4 h-4" /> },
-    { id: 'admin', label: t('navAdminDashboard'), icon: <ShieldAlert className="w-4 h-4" /> },
-    { id: 'worker', label: t('navWorkerDashboard'), icon: <HardHat className="w-4 h-4" /> }
+    { id: 'awareness', label: t('navAwareness'), icon: <ShieldAlert className="w-4 h-4" /> }
   ];
+
+  // Role dashboard target
+  const getDashboardTarget = () => {
+    if (role === 'admin') return { id: 'admin', label: language === 'te' ? 'పంచాయతీ అడ్మిన్' : 'Panchayat Admin' };
+    if (role === 'worker') return { id: 'worker', label: language === 'te' ? 'పారిశుద్ధ్య డాష్‌బోర్డు' : 'Worker Dashboard' };
+    return { id: 'citizen', label: language === 'te' ? 'నా డాష్‌బోర్డు' : 'Citizen Dashboard' };
+  };
+
+  const dashboardTarget = user ? getDashboardTarget() : null;
 
   return (
     <header className="sticky top-0 z-50 bg-white border-b border-emerald-100 shadow-sm">
@@ -130,9 +142,9 @@ export const Navbar: React.FC<NavbarProps> = ({ currentPage, onNavigate }) => {
             </div>
           </div>
 
-          {/* Desktop Links */}
-          <nav className="hidden lg:flex items-center gap-1">
-            {navLinks.map((link) => {
+          {/* Desktop Navigation Links */}
+          <nav className="hidden md:flex items-center gap-1">
+            {publicLinks.map((link) => {
               const isActive = currentPage === link.id;
               return (
                 <button
@@ -149,57 +161,55 @@ export const Navbar: React.FC<NavbarProps> = ({ currentPage, onNavigate }) => {
                 </button>
               );
             })}
+
+            {/* Authenticated user's dedicated dashboard link */}
+            {user && dashboardTarget && (
+              <button
+                onClick={() => onNavigate(dashboardTarget.id)}
+                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-bold transition ml-2 ${
+                  currentPage === dashboardTarget.id
+                    ? 'bg-forest-600 text-white shadow'
+                    : 'bg-forest-50 text-forest-800 hover:bg-forest-100 border border-forest-200'
+                }`}
+              >
+                <LayoutDashboard className="w-4 h-4" />
+                {dashboardTarget.label}
+              </button>
+            )}
           </nav>
 
-          {/* User Role Quick Switcher & Auth */}
-          <div className="hidden sm:flex items-center gap-2">
+          {/* Right Action: Login button if logged out, or Account Menu & Logout if authenticated */}
+          <div className="hidden sm:flex items-center gap-3">
             {user ? (
-              <div className="flex items-center gap-2 pl-2 border-l border-slate-200">
+              <div className="flex items-center gap-3 pl-3 border-l border-slate-200">
                 <div className="text-right">
-                  <div className="text-xs font-bold text-slate-800 line-clamp-1">{user.full_name.split(' ')[0]}</div>
-                  <div className="text-[10px] uppercase font-bold text-forest-700 bg-forest-50 px-1 rounded">
-                    {user.role}
+                  <div className="text-xs font-bold text-slate-800 line-clamp-1">{user.full_name}</div>
+                  <div className="text-[10px] uppercase font-bold text-forest-700 bg-forest-50 px-1.5 py-0.5 rounded inline-block">
+                    {user.role === 'admin' ? 'Panchayat Admin' : user.role === 'worker' ? 'Sanitation Worker' : 'Citizen'}
                   </div>
                 </div>
 
-                {/* Quick Role Toggle for review */}
-                <select
-                  value={role || 'citizen'}
-                  onChange={(e) => {
-                    const newRole = e.target.value as any;
-                    switchRole(newRole);
-                    if (newRole === 'admin') onNavigate('admin');
-                    else if (newRole === 'worker') onNavigate('worker');
-                    else onNavigate('citizen');
-                  }}
-                  className="text-xs bg-slate-100 border border-slate-300 rounded px-2 py-1 font-medium text-slate-700 cursor-pointer focus:ring-1 focus:ring-forest-500"
-                  title="Switch Role Preview"
-                >
-                  <option value="citizen">Role: Citizen</option>
-                  <option value="worker">Role: Worker</option>
-                  <option value="admin">Role: Admin</option>
-                </select>
-
                 <button
-                  onClick={logout}
-                  className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition"
-                  title="Logout"
+                  onClick={handleLogout}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-600 hover:text-red-700 hover:bg-red-50 rounded-lg border border-slate-200 transition"
+                  title="Sign out of your account"
                 >
-                  <LogOut className="w-4 h-4" />
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>{t('navLogout')}</span>
                 </button>
               </div>
             ) : (
               <button
                 onClick={() => onNavigate('login')}
-                className="bg-forest-600 hover:bg-forest-700 text-white text-sm font-semibold px-4 py-2 rounded-lg shadow-sm transition"
+                className="bg-forest-600 hover:bg-forest-700 text-white text-sm font-bold px-5 py-2 rounded-xl shadow-sm transition"
               >
                 {t('navLogin')}
               </button>
             )}
           </div>
 
-          {/* Mobile Menu Button */}
-          <div className="flex lg:hidden items-center gap-2">
+          {/* Mobile Menu Hamburger */}
+          <div className="flex md:hidden items-center gap-2">
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               className="p-2 rounded-lg text-slate-600 hover:bg-slate-100"
@@ -213,8 +223,8 @@ export const Navbar: React.FC<NavbarProps> = ({ currentPage, onNavigate }) => {
 
       {/* Mobile Drawer */}
       {mobileMenuOpen && (
-        <div className="lg:hidden border-t border-slate-200 bg-white px-4 pt-3 pb-5 space-y-2 shadow-lg">
-          {navLinks.map((link) => (
+        <div className="md:hidden border-t border-slate-200 bg-white px-4 pt-3 pb-5 space-y-2 shadow-lg">
+          {publicLinks.map((link) => (
             <button
               key={link.id}
               onClick={() => {
@@ -232,49 +242,54 @@ export const Navbar: React.FC<NavbarProps> = ({ currentPage, onNavigate }) => {
             </button>
           ))}
 
-          {/* Role switcher inside mobile menu */}
-          <div className="pt-3 border-t border-slate-200 flex flex-col gap-2">
-            <label className="text-xs font-semibold text-slate-500">
-              {language === 'te' ? 'డెమో పాత్రను ఎంచుకోండి:' : 'Switch Demo User Role:'}
-            </label>
-            <div className="grid grid-cols-3 gap-2">
+          {/* If authenticated, show their dashboard link */}
+          {user && dashboardTarget && (
+            <button
+              onClick={() => {
+                onNavigate(dashboardTarget.id);
+                setMobileMenuOpen(false);
+              }}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-base font-bold text-left ${
+                currentPage === dashboardTarget.id
+                  ? 'bg-forest-600 text-white'
+                  : 'bg-forest-50 text-forest-900 border border-forest-200'
+              }`}
+            >
+              <LayoutDashboard className="w-5 h-5" />
+              {dashboardTarget.label}
+            </button>
+          )}
+
+          {/* Mobile Auth action */}
+          <div className="pt-3 border-t border-slate-200">
+            {user ? (
+              <div className="space-y-3">
+                <div className="px-2">
+                  <div className="text-sm font-bold text-slate-800">{user.full_name}</div>
+                  <div className="text-xs text-forest-700 font-semibold uppercase">{user.role}</div>
+                </div>
+                <button
+                  onClick={() => {
+                    handleLogout();
+                    setMobileMenuOpen(false);
+                  }}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 text-sm font-bold text-red-600 bg-red-50 rounded-xl"
+                >
+                  <LogOut className="w-4 h-4" />
+                  <span>{t('navLogout')}</span>
+                </button>
+              </div>
+            ) : (
               <button
                 onClick={() => {
-                  switchRole('citizen');
-                  onNavigate('citizen');
+                  onNavigate('login');
                   setMobileMenuOpen(false);
                 }}
-                className={`py-1.5 text-xs font-bold rounded ${
-                  role === 'citizen' ? 'bg-forest-600 text-white' : 'bg-slate-100 text-slate-700'
-                }`}
+                className="w-full bg-forest-600 text-white font-bold py-2.5 rounded-xl text-center text-sm"
               >
-                Citizen
+                {t('navLogin')}
               </button>
-              <button
-                onClick={() => {
-                  switchRole('worker');
-                  onNavigate('worker');
-                  setMobileMenuOpen(false);
-                }}
-                className={`py-1.5 text-xs font-bold rounded ${
-                  role === 'worker' ? 'bg-forest-600 text-white' : 'bg-slate-100 text-slate-700'
-                }`}
-              >
-                Worker
-              </button>
-              <button
-                onClick={() => {
-                  switchRole('admin');
-                  onNavigate('admin');
-                  setMobileMenuOpen(false);
-                }}
-                className={`py-1.5 text-xs font-bold rounded ${
-                  role === 'admin' ? 'bg-forest-600 text-white' : 'bg-slate-100 text-slate-700'
-                }`}
-              >
-                Admin
-              </button>
-            </div>
+            )}
           </div>
         </div>
       )}

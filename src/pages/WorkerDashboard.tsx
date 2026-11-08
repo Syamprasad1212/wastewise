@@ -13,14 +13,15 @@ import {
   Scale,
   Plus,
   Phone,
-  ArrowRight,
-  Sparkles
+  LayoutDashboard,
+  ClipboardList
 } from 'lucide-react';
 
 export const WorkerDashboard: React.FC = () => {
   const { user } = useAuth();
   const { language, t } = useLanguage();
 
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'tasks' | 'daily' | 'mixed'>('dashboard');
   const [reports, setReports] = useState<WasteReport[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -30,15 +31,13 @@ export const WorkerDashboard: React.FC = () => {
   const [completionPhoto, setCompletionPhoto] = useState('');
   const [resolving, setResolving] = useState(false);
 
-  // Mixed waste report modal
-  const [showMixedReporter, setShowMixedReporter] = useState(false);
+  // Mixed waste report state
   const [mixedHouseNo, setMixedHouseNo] = useState('');
   const [mixedWard, setMixedWard] = useState('Ward 1');
   const [mixedNotes, setMixedNotes] = useState('');
   const [mixedReportSuccess, setMixedReportSuccess] = useState(false);
 
   // Daily Waste Quantity Logger state
-  const [showDailyLogger, setShowDailyLogger] = useState(false);
   const [logDate, setLogDate] = useState(new Date().toISOString().split('T')[0]);
   const [logWard, setLogWard] = useState('Ward 1');
   const [logWetKg, setLogWetKg] = useState<number>(180);
@@ -54,7 +53,6 @@ export const WorkerDashboard: React.FC = () => {
   const loadWorkerTasks = async () => {
     setLoading(true);
     const all = await villageDataService.getReports();
-    // Filter tasks assigned to this worker, or show pending tasks if none assigned
     const workerTasks = all.filter(
       r => r.assigned_worker_id === user?.id ||
            r.assigned_worker_name?.toLowerCase().includes('mallesh') ||
@@ -115,8 +113,8 @@ export const WorkerDashboard: React.FC = () => {
     setLogSuccess(true);
     setTimeout(() => {
       setLogSuccess(false);
-      setShowDailyLogger(false);
-    }, 2500);
+      setActiveTab('dashboard');
+    }, 2000);
   };
 
   const handleReportMixedWaste = async (e: React.FormEvent) => {
@@ -135,198 +133,429 @@ export const WorkerDashboard: React.FC = () => {
     setMixedReportSuccess(true);
     setTimeout(() => {
       setMixedReportSuccess(false);
-      setShowMixedReporter(false);
       setMixedHouseNo('');
       setMixedNotes('');
-    }, 2500);
+      setActiveTab('tasks');
+    }, 2000);
     await loadWorkerTasks();
   };
 
+  const workerTabs = [
+    { id: 'dashboard', labelEn: 'Dashboard', labelTe: 'డాష్‌బోర్డు', icon: <LayoutDashboard className="w-4 h-4" /> },
+    { id: 'tasks', labelEn: `Assigned Tasks (${reports.length})`, labelTe: `కేటాయించిన పనులు (${reports.length})`, icon: <ClipboardList className="w-4 h-4" /> },
+    { id: 'daily', labelEn: 'Daily Collection', labelTe: 'రోజువారీ తూకం', icon: <Scale className="w-4 h-4" /> },
+    { id: 'mixed', labelEn: 'Report Mixed Waste', labelTe: 'మిశ్రమ చెత్త నోటీస్', icon: <AlertTriangle className="w-4 h-4" /> }
+  ];
+
+  const pendingTasksCount = reports.filter(r => r.status !== 'resolved').length;
+
   return (
-    <div className="py-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
+    <div className="py-8 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
       
-      {/* Header Card */}
-      <div className="bg-forest-800 text-white rounded-2xl p-6 sm:p-8 shadow-md">
+      {/* Header Banner */}
+      <div className="bg-forest-800 text-white rounded-3xl p-6 sm:p-7 shadow-md">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 text-forest-200 text-xs font-bold uppercase tracking-wider mb-1">
               <HardHat className="w-4 h-4" />
-              <span>{language === 'te' ? 'పారిశుద్ధ్య కార్మికుల డ్యాష్‌బోర్డు' : 'Sanitation Worker Operational Console'}</span>
+              <span>{language === 'te' ? 'పారిశుద్ధ్య కార్మికుల పోర్టల్' : 'Sanitation Worker Operational Console'}</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-black">
               {language === 'te' ? `నమస్కారం, ${user?.full_name}` : `Namaste, ${user?.full_name}`}
             </h1>
-            <p className="text-forest-100 text-sm mt-1">
-              {language === 'te' ? 'నేటి మార్గం: వార్డు 1 & 2 | ఉదయం 06:30 నుండి సేకరణ' : 'Assigned Route: Ward 1 & 2 | Morning Doorstep Collection'}
+            <p className="text-forest-100 text-xs sm:text-sm mt-1">
+              {language === 'te' ? 'మార్గాలు: వార్డు 1 & 2 | ఉదయం 06:30 నుండి డోర్-టు-డోర్ సేకరణ' : 'Assigned Routes: Ward 1 & 2 | Morning Doorstep Collection'}
             </p>
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={() => setShowDailyLogger(!showDailyLogger)}
-              className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black px-4 py-2.5 rounded-xl text-xs sm:text-sm shadow-md transition"
-            >
-              <Scale className="w-4 h-4" />
-              <span>{language === 'te' ? 'నేటి చెత్త తూకం నమోదు' : 'Log Daily Waste (Kg)'}</span>
-            </button>
-
-            <button
-              onClick={() => setShowMixedReporter(!showMixedReporter)}
-              className="flex items-center gap-2 bg-rose-600 hover:bg-rose-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs sm:text-sm shadow-md transition"
-            >
-              <AlertTriangle className="w-4 h-4" />
-              <span>{language === 'te' ? 'మిశ్రమ చెత్త నోటీస్' : 'Report Mixed Waste'}</span>
-            </button>
+          <div className="flex items-center gap-2">
+            <span className="bg-forest-900/60 px-3.5 py-2 rounded-xl text-xs font-bold border border-forest-600">
+              {pendingTasksCount} {language === 'te' ? 'పెండింగ్ పనులు' : 'Pending Tasks'}
+            </span>
           </div>
         </div>
       </div>
 
-      {/* Daily Waste Logger Modal / Section */}
-      {showDailyLogger && (
-        <div className="bg-emerald-50 border-2 border-emerald-500 p-6 rounded-2xl shadow-md space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Scale className="w-6 h-6 text-emerald-800" />
-              <h3 className="font-extrabold text-emerald-950 text-lg">
-                {language === 'te' ? 'రోజువారీ సేకరించిన చెత్త పరిమాణం (కేజీలలో)' : 'Record Daily Waste Quantities Collected'}
-              </h3>
-            </div>
+      {/* Role-Specific Navigation Tabs */}
+      <div className="flex border-b border-slate-200 overflow-x-auto space-x-1 sm:space-x-2">
+        {workerTabs.map((tab) => {
+          const isActive = activeTab === tab.id;
+          return (
             <button
-              onClick={() => setShowDailyLogger(false)}
-              className="text-xs font-bold text-slate-500 hover:text-slate-800"
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as any)}
+              className={`flex items-center gap-2 py-3 px-4 font-bold text-xs sm:text-sm whitespace-nowrap border-b-2 transition ${
+                isActive
+                  ? 'border-forest-600 text-forest-800 bg-forest-50/70 rounded-t-xl'
+                  : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-100/60 rounded-t-xl'
+              }`}
             >
-              Close
+              {tab.icon}
+              <span>{language === 'te' ? tab.labelTe : tab.labelEn}</span>
             </button>
+          );
+        })}
+      </div>
+
+      {/* TAB 1: WORKER DASHBOARD OVERVIEW */}
+      {activeTab === 'dashboard' && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+              <div>
+                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                  {language === 'te' ? 'కేటాయించిన పనులు' : 'Active Tasks'}
+                </span>
+                <div className="text-2xl font-black text-slate-900 mt-1">{reports.length}</div>
+              </div>
+              <div className="w-11 h-11 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-bold">
+                <ClipboardList className="w-5 h-5" />
+              </div>
+            </div>
+
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+              <div>
+                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                  {language === 'te' ? 'నేడు శుభ్రం చేసినవి' : 'Cleaned & Resolved'}
+                </span>
+                <div className="text-2xl font-black text-emerald-700 mt-1">
+                  {reports.filter(r => r.status === 'resolved').length}
+                </div>
+              </div>
+              <div className="w-11 h-11 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
+                <CheckCircle2 className="w-5 h-5" />
+              </div>
+            </div>
+
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+              <div>
+                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                  {language === 'te' ? 'తక్షణ చర్యలు' : 'Pending Action'}
+                </span>
+                <div className="text-2xl font-black text-amber-600 mt-1">{pendingTasksCount}</div>
+              </div>
+              <div className="w-11 h-11 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center font-bold">
+                <Clock className="w-5 h-5" />
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm space-y-4">
+              <h3 className="font-extrabold text-slate-900 text-base">
+                {language === 'te' ? 'త్వరిత చర్యలు' : 'Quick Operational Actions'}
+              </h3>
+              <div className="space-y-3">
+                <button
+                  onClick={() => setActiveTab('daily')}
+                  className="w-full p-4 rounded-2xl bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 text-left transition flex items-center justify-between"
+                >
+                  <div>
+                    <strong className="text-emerald-950 text-sm block">
+                      {language === 'te' ? 'నేటి చెత్త తూకం నమోదు చేయండి' : 'Log Daily Waste Weight (Kg)'}
+                    </strong>
+                    <span className="text-xs text-emerald-800">
+                      {language === 'te' ? 'తడి, పొడి మరియు మిశ్రమ చెత్త పరిమాణం' : 'Record wet, dry and mixed waste kilograms'}
+                    </span>
+                  </div>
+                  <Scale className="w-5 h-5 text-emerald-700" />
+                </button>
+
+                <button
+                  onClick={() => setActiveTab('mixed')}
+                  className="w-full p-4 rounded-2xl bg-rose-50 border border-rose-200 hover:bg-rose-100 text-left transition flex items-center justify-between"
+                >
+                  <div>
+                    <strong className="text-rose-950 text-sm block">
+                      {language === 'te' ? 'మిశ్రమ చెత్త నోటీస్ నివేదించండి' : 'Report Non-Segregated House'}
+                    </strong>
+                    <span className="text-xs text-rose-800">
+                      {language === 'te' ? 'నియమం పాటించని ఇంటి నంబరు పంచాయతీకి పంపండి' : 'Alert Panchayat Secretary for household counseling'}
+                    </span>
+                  </div>
+                  <AlertTriangle className="w-5 h-5 text-rose-700" />
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm space-y-3 flex flex-col justify-between">
+              <div>
+                <h3 className="font-extrabold text-slate-900 text-base mb-1">
+                  {language === 'te' ? 'పారిశుద్ధ్య మార్గదర్శకాలు' : 'Daily Safety & Field Guide'}
+                </h3>
+                <ul className="text-xs text-slate-600 space-y-2 mt-3">
+                  <li className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    <span>Wear rubber gloves and safety boots before handling bins.</span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                    <span>Separate sharp glass or medical items immediately into marked boxes.</span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-purple-500"></span>
+                    <span>Always capture a clear photograph after cleaning a reported waste dump.</span>
+                  </li>
+                </ul>
+              </div>
+
+              <button
+                onClick={() => setActiveTab('tasks')}
+                className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-2.5 rounded-xl text-xs transition"
+              >
+                {language === 'te' ? 'పనుల జాబితాకు వెళ్ళండి' : 'Go to Assigned Task List'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 2: ASSIGNED TASKS */}
+      {activeTab === 'tasks' && (
+        <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 shadow-sm space-y-6">
+          <div className="border-b pb-4">
+            <h2 className="text-xl font-bold text-slate-900">
+              {language === 'te' ? 'కేటాయించిన పారిశుద్ధ్య పనులు' : 'Assigned Clean-up Grievances'}
+            </h2>
+            <p className="text-xs text-slate-500">
+              Update status from 'in_progress' to 'resolved' and attach completion photos.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {reports.map((task) => (
+              <div
+                key={task.id}
+                className={`rounded-2xl border-2 p-5 flex flex-col justify-between transition ${
+                  task.status === 'resolved'
+                    ? 'border-emerald-200 bg-emerald-50/20'
+                    : 'border-slate-200 bg-slate-50'
+                }`}
+              >
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono text-xs font-bold bg-white px-2 py-0.5 rounded border border-slate-200 text-slate-700">
+                      {task.id}
+                    </span>
+                    <span className={`px-2.5 py-0.5 rounded text-xs font-bold ${
+                      task.status === 'resolved' ? 'bg-emerald-100 text-emerald-800' :
+                      task.status === 'in_progress' ? 'bg-purple-100 text-purple-800' :
+                      'bg-blue-100 text-blue-800'
+                    }`}>
+                      {task.status}
+                    </span>
+                  </div>
+
+                  <h3 className="text-base font-bold text-slate-900 capitalize">
+                    {task.category} Dump in {task.ward_number}
+                  </h3>
+
+                  <p className="text-xs text-slate-600">{task.description}</p>
+
+                  <div className="flex items-center gap-1.5 text-xs text-slate-700 font-semibold bg-white p-2.5 rounded-xl border border-slate-200">
+                    <MapPin className="w-4 h-4 text-forest-600 flex-shrink-0" />
+                    <span className="line-clamp-1">{task.location_address}</span>
+                  </div>
+
+                  <div className="text-[11px] text-slate-500">
+                    Citizen: <strong>{task.citizen_name}</strong> | Phone: <a href={`tel:${task.phone_number}`} className="text-forest-700 underline font-mono">{task.phone_number}</a>
+                  </div>
+
+                  {task.photo_url && (
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-400 block mb-1">Citizen photo:</span>
+                      <div className="w-full h-32 rounded-xl overflow-hidden border">
+                        <img src={task.photo_url} alt="Waste dump" className="w-full h-full object-cover" />
+                      </div>
+                    </div>
+                  )}
+
+                  {task.completion_photo_url && (
+                    <div>
+                      <span className="text-[10px] font-bold text-emerald-700 block mb-1">Cleaned Photo Proof:</span>
+                      <div className="w-full h-32 rounded-xl overflow-hidden border border-emerald-500">
+                        <img src={task.completion_photo_url} alt="Cleaned" className="w-full h-full object-cover" />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="pt-4 mt-3 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2">
+                  {task.status !== 'resolved' ? (
+                    <>
+                      <button
+                        onClick={() => handleUpdateStatus(task.id, 'in_progress')}
+                        className={`text-xs font-bold px-3 py-1.5 rounded-lg transition ${
+                          task.status === 'in_progress'
+                            ? 'bg-purple-600 text-white'
+                            : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-100'
+                        }`}
+                      >
+                        {task.status === 'in_progress' ? 'Working Now...' : 'Start Cleaning'}
+                      </button>
+
+                      <button
+                        onClick={() => setSelectedTask(task)}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-1.5 rounded-lg shadow-sm transition flex items-center gap-1"
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span>{language === 'te' ? 'పూర్తయింది (ఫోటో అప్‌లోడ్)' : 'Mark Cleaned & Proof'}</span>
+                      </button>
+                    </>
+                  ) : (
+                    <div className="text-xs font-bold text-emerald-700 flex items-center gap-1">
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>Cleaned & Verified</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 3: DAILY WASTE COLLECTION LOGGER */}
+      {activeTab === 'daily' && (
+        <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 shadow-sm max-w-2xl mx-auto space-y-6">
+          <div className="border-b pb-4">
+            <h2 className="text-xl font-bold text-slate-900">
+              {language === 'te' ? 'రోజువారీ చెత్త సేకరణ తూకం నమోదు' : 'Record Daily Waste Collection Weight (Kg)'}
+            </h2>
+            <p className="text-xs text-slate-500">
+              Enter daily quantities delivered to the village vermicompost and recycling yard.
+            </p>
           </div>
 
           {logSuccess && (
-            <div className="p-3 bg-emerald-600 text-white rounded-xl text-xs font-bold flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4" />
+            <div className="p-4 bg-emerald-50 text-emerald-900 border border-emerald-300 rounded-2xl text-xs font-bold flex items-center gap-2">
+              <CheckCircle2 className="w-5 h-5 text-emerald-600" />
               <span>{language === 'te' ? 'నేటి రికార్డు విజయవంతంగా నమోదైంది!' : 'Daily collection record saved to village registry!'}</span>
             </div>
           )}
 
-          <form onSubmit={handleLogDailyCollection} className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-            <div>
-              <label className="text-xs font-bold text-slate-700 block mb-1">Date</label>
-              <input
-                type="date"
-                required
-                value={logDate}
-                onChange={(e) => setLogDate(e.target.value)}
-                className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs font-semibold"
-              />
+          <form onSubmit={handleLogDailyCollection} className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">Date</label>
+                <input
+                  type="date"
+                  required
+                  value={logDate}
+                  onChange={(e) => setLogDate(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs font-semibold"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">Ward Number</label>
+                <select
+                  value={logWard}
+                  onChange={(e) => setLogWard(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs font-semibold"
+                >
+                  <option value="Ward 1">Ward 1 (Bazaar Area)</option>
+                  <option value="Ward 2">Ward 2 (Temple Street)</option>
+                  <option value="Ward 3">Ward 3 (School Zone)</option>
+                  <option value="Ward 4">Ward 4 (Canal Road)</option>
+                </select>
+              </div>
             </div>
-            <div>
-              <label className="text-xs font-bold text-slate-700 block mb-1">Ward</label>
-              <select
-                value={logWard}
-                onChange={(e) => setLogWard(e.target.value)}
-                className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs font-semibold"
-              >
-                <option value="Ward 1">Ward 1 (Bazaar)</option>
-                <option value="Ward 2">Ward 2 (Temple)</option>
-                <option value="Ward 3">Ward 3 (School)</option>
-                <option value="Ward 4">Ward 4 (Canal)</option>
-              </select>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+              <div>
+                <label className="text-xs font-bold text-emerald-800 block mb-1">🌱 Wet Waste (kg)</label>
+                <input
+                  type="number"
+                  required
+                  min={0}
+                  value={logWetKg}
+                  onChange={(e) => setLogWetKg(Number(e.target.value))}
+                  className="w-full bg-emerald-50 border border-emerald-300 rounded-xl p-2.5 text-sm font-bold text-emerald-950"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-blue-800 block mb-1">📦 Dry Waste (kg)</label>
+                <input
+                  type="number"
+                  required
+                  min={0}
+                  value={logDryKg}
+                  onChange={(e) => setLogDryKg(Number(e.target.value))}
+                  className="w-full bg-blue-50 border border-blue-300 rounded-xl p-2.5 text-sm font-bold text-blue-950"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-rose-800 block mb-1">⚠️ Mixed Waste (kg)</label>
+                <input
+                  type="number"
+                  required
+                  min={0}
+                  value={logMixedKg}
+                  onChange={(e) => setLogMixedKg(Number(e.target.value))}
+                  className="w-full bg-rose-50 border border-rose-300 rounded-xl p-2.5 text-sm font-bold text-rose-950"
+                />
+              </div>
             </div>
+
             <div>
-              <label className="text-xs font-bold text-emerald-800 block mb-1">🌱 Wet Waste (kg)</label>
-              <input
-                type="number"
-                required
-                min={0}
-                value={logWetKg}
-                onChange={(e) => setLogWetKg(Number(e.target.value))}
-                className="w-full bg-white border border-emerald-400 rounded-lg p-2 text-xs font-bold"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-bold text-blue-800 block mb-1">📦 Dry Waste (kg)</label>
-              <input
-                type="number"
-                required
-                min={0}
-                value={logDryKg}
-                onChange={(e) => setLogDryKg(Number(e.target.value))}
-                className="w-full bg-white border border-blue-400 rounded-lg p-2 text-xs font-bold"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-bold text-rose-800 block mb-1">⚠️ Mixed Waste (kg)</label>
-              <input
-                type="number"
-                required
-                min={0}
-                value={logMixedKg}
-                onChange={(e) => setLogMixedKg(Number(e.target.value))}
-                className="w-full bg-white border border-rose-400 rounded-lg p-2 text-xs font-bold"
-              />
-            </div>
-            <div className="sm:col-span-2">
-              <label className="text-xs font-bold text-slate-700 block mb-1">Observations / Segregation Notes</label>
-              <input
-                type="text"
+              <label className="text-xs font-bold text-slate-700 block mb-1">Observations / Notes</label>
+              <textarea
+                rows={2}
                 value={logNotes}
                 onChange={(e) => setLogNotes(e.target.value)}
-                placeholder="e.g. 95% households gave segregated wet buckets today"
-                className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs"
+                placeholder="e.g. 95% compliance in Bazaar area today"
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs text-slate-800"
               />
             </div>
-            <div className="flex items-end">
-              <button
-                type="submit"
-                className="w-full bg-forest-700 hover:bg-forest-800 text-white font-bold py-2 rounded-lg text-xs"
-              >
-                Save Daily Log
-              </button>
-            </div>
+
+            <button
+              type="submit"
+              className="w-full bg-forest-600 hover:bg-forest-700 text-white font-bold py-3 rounded-xl text-xs sm:text-sm shadow transition"
+            >
+              {language === 'te' ? 'తూకం సేవ్ చేయండి' : 'Save Daily Collection Entry'}
+            </button>
           </form>
         </div>
       )}
 
-      {/* Mixed Waste Reporter Modal */}
-      {showMixedReporter && (
-        <div className="bg-rose-50 border-2 border-rose-500 p-6 rounded-2xl shadow-md space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="w-6 h-6 text-rose-700" />
-              <h3 className="font-extrabold text-rose-950 text-lg">
-                {language === 'te' ? 'మిశ్రమ చెత్త రిపోర్టింగ్ (నియమ ఉల్లంఘన)' : 'Report Non-Segregated Mixed Household Waste'}
-              </h3>
-            </div>
-            <button
-              onClick={() => setShowMixedReporter(false)}
-              className="text-xs font-bold text-slate-500 hover:text-slate-800"
-            >
-              Close
-            </button>
+      {/* TAB 4: REPORT MIXED WASTE INCIDENT */}
+      {activeTab === 'mixed' && (
+        <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 shadow-sm max-w-xl mx-auto space-y-6">
+          <div className="border-b pb-4">
+            <h2 className="text-xl font-bold text-slate-900">
+              {language === 'te' ? 'మిశ్రమ చెత్త నోటీస్ నివేదన' : 'Report Household Mixing Dry & Wet Waste'}
+            </h2>
+            <p className="text-xs text-slate-500">
+              Notifies Panchayat Secretary so ward councilors can conduct doorstep counseling.
+            </p>
           </div>
 
           {mixedReportSuccess && (
-            <div className="p-3 bg-rose-600 text-white rounded-xl text-xs font-bold">
-              {language === 'te' ? 'నోటీస్ పంచాయతీ కార్యాలయానికి పంపబడింది!' : 'Incident reported to Panchayat Secretary for counseling.'}
+            <div className="p-4 bg-rose-50 text-rose-900 border border-rose-300 rounded-2xl text-xs font-bold flex items-center gap-2">
+              <CheckCircle2 className="w-5 h-5 text-rose-600" />
+              <span>{language === 'te' ? 'నోటీస్ పంచాయతీ కార్యాలయానికి పంపబడింది!' : 'Incident reported to Panchayat Secretary!'}</span>
             </div>
           )}
 
-          <form onSubmit={handleReportMixedWaste} className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <form onSubmit={handleReportMixedWaste} className="space-y-4">
             <div>
-              <label className="text-xs font-bold text-slate-700 block mb-1">Household Door No</label>
+              <label className="text-xs font-bold text-slate-700 block mb-1">Household Door Number</label>
               <input
                 type="text"
                 required
                 value={mixedHouseNo}
                 onChange={(e) => setMixedHouseNo(e.target.value)}
                 placeholder="e.g. 2-14/B"
-                className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs"
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs"
               />
             </div>
+
             <div>
-              <label className="text-xs font-bold text-slate-700 block mb-1">Ward</label>
+              <label className="text-xs font-bold text-slate-700 block mb-1">Ward Number</label>
               <select
                 value={mixedWard}
                 onChange={(e) => setMixedWard(e.target.value)}
-                className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs"
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs font-semibold"
               >
                 <option value="Ward 1">Ward 1</option>
                 <option value="Ward 2">Ward 2</option>
@@ -334,150 +563,37 @@ export const WorkerDashboard: React.FC = () => {
                 <option value="Ward 4">Ward 4</option>
               </select>
             </div>
+
             <div>
-              <label className="text-xs font-bold text-slate-700 block mb-1">Incident Details</label>
-              <input
-                type="text"
+              <label className="text-xs font-bold text-slate-700 block mb-1">Violation Details</label>
+              <textarea
+                rows={3}
                 required
                 value={mixedNotes}
                 onChange={(e) => setMixedNotes(e.target.value)}
-                placeholder="e.g. Plastic mixed in wet food scraps"
-                className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs"
+                placeholder="e.g. Household mixed plastic bottles and plastic wrappers inside wet organic bucket"
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs"
               />
             </div>
-            <div className="sm:col-span-3">
-              <button
-                type="submit"
-                className="bg-rose-700 hover:bg-rose-800 text-white font-bold px-6 py-2 rounded-lg text-xs"
-              >
-                Submit Incident to Panchayat
-              </button>
-            </div>
+
+            <button
+              type="submit"
+              className="w-full bg-rose-700 hover:bg-rose-800 text-white font-bold py-3 rounded-xl text-xs shadow transition"
+            >
+              {language === 'te' ? 'పంచాయతీకి నివేదించండి' : 'Submit Mixed Waste Report'}
+            </button>
           </form>
         </div>
       )}
 
-      {/* Assigned Tasks & Complaints List */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-6">
-        <div className="flex items-center justify-between border-b pb-4">
-          <div>
-            <h3 className="text-xl font-black text-slate-900">
-              {language === 'te' ? 'కేటాయించిన పనులు & ఫిర్యాదులు' : 'My Assigned Clean-up Tasks'}
-            </h3>
-            <p className="text-xs text-slate-500">
-              Update task status in real time and upload completion photograph to notify the citizen.
-            </p>
-          </div>
-          <span className="text-xs font-bold bg-forest-100 text-forest-800 px-3 py-1 rounded-full">
-            {reports.length} {language === 'te' ? 'పనులు' : 'Tasks Active'}
-          </span>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {reports.map((task) => (
-            <div
-              key={task.id}
-              className={`rounded-2xl border-2 p-5 flex flex-col justify-between transition ${
-                task.status === 'resolved'
-                  ? 'border-emerald-200 bg-emerald-50/20'
-                  : 'border-slate-200 bg-slate-50'
-              }`}
-            >
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="font-mono text-xs font-bold bg-white px-2 py-0.5 rounded border border-slate-200 text-slate-700">
-                    {task.id}
-                  </span>
-                  <span className={`px-2 py-0.5 rounded text-xs font-bold ${
-                    task.status === 'resolved' ? 'bg-emerald-100 text-emerald-800' :
-                    task.status === 'in_progress' ? 'bg-purple-100 text-purple-800' :
-                    'bg-blue-100 text-blue-800'
-                  }`}>
-                    {task.status}
-                  </span>
-                </div>
-
-                <h4 className="text-base font-bold text-slate-900 capitalize">
-                  {task.category} Dump in {task.ward_number}
-                </h4>
-
-                <p className="text-xs text-slate-600">
-                  {task.description}
-                </p>
-
-                <div className="flex items-center gap-1.5 text-xs text-slate-700 font-semibold bg-white p-2 rounded-lg border border-slate-200">
-                  <MapPin className="w-4 h-4 text-forest-600 flex-shrink-0" />
-                  <span className="line-clamp-1">{task.location_address}</span>
-                </div>
-
-                <div className="text-[11px] text-slate-500">
-                  Citizen: <strong>{task.citizen_name}</strong> | Phone: <a href={`tel:${task.phone_number}`} className="text-forest-700 underline font-mono">{task.phone_number}</a>
-                </div>
-
-                {/* Citizen Photo */}
-                {task.photo_url && (
-                  <div>
-                    <span className="text-[10px] font-bold text-slate-400 block mb-1">Citizen photo:</span>
-                    <div className="w-full h-32 rounded-xl overflow-hidden border">
-                      <img src={task.photo_url} alt="Waste dump" className="w-full h-full object-cover" />
-                    </div>
-                  </div>
-                )}
-
-                {/* Resolved Photo if done */}
-                {task.completion_photo_url && (
-                  <div>
-                    <span className="text-[10px] font-bold text-emerald-700 block mb-1">Cleaned Photo Proof:</span>
-                    <div className="w-full h-32 rounded-xl overflow-hidden border border-emerald-500">
-                      <img src={task.completion_photo_url} alt="Cleaned" className="w-full h-full object-cover" />
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Action Buttons */}
-              <div className="pt-4 mt-3 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2">
-                {task.status !== 'resolved' ? (
-                  <>
-                    <button
-                      onClick={() => handleUpdateStatus(task.id, 'in_progress')}
-                      className={`text-xs font-bold px-3 py-1.5 rounded-lg transition ${
-                        task.status === 'in_progress'
-                          ? 'bg-purple-600 text-white'
-                          : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-100'
-                      }`}
-                    >
-                      {task.status === 'in_progress' ? 'Working Now...' : 'Start Cleaning'}
-                    </button>
-
-                    <button
-                      onClick={() => setSelectedTask(task)}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-1.5 rounded-lg shadow-sm transition flex items-center gap-1"
-                    >
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      <span>{language === 'te' ? 'పూర్తయింది (ఫోటో అప్‌లోడ్)' : 'Mark Cleaned & Upload Proof'}</span>
-                    </button>
-                  </>
-                ) : (
-                  <div className="text-xs font-bold text-emerald-700 flex items-center gap-1">
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>Cleaned & Verified</span>
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
       {/* Completion Modal */}
       {selectedTask && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 space-y-4 shadow-2xl">
             <div className="flex items-center justify-between border-b pb-3">
-              <h4 className="font-extrabold text-slate-900 text-base">
+              <h3 className="font-extrabold text-slate-900 text-base">
                 {language === 'te' ? 'పని పూర్తయిన రుజువు (ఫోటో)' : 'Upload Cleaning Completion Proof'}
-              </h4>
+              </h3>
               <button
                 onClick={() => setSelectedTask(null)}
                 className="text-xs font-bold text-slate-400 hover:text-slate-700"

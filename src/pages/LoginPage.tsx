@@ -2,154 +2,306 @@ import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { UserRole } from '../types';
-import { User, ShieldAlert, HardHat, Lock, ArrowRight, CheckCircle2 } from 'lucide-react';
+import { User, HardHat, ShieldAlert, ArrowRight, Lock, Mail, AlertCircle, HelpCircle } from 'lucide-react';
 
 interface LoginPageProps {
   onNavigate: (page: string) => void;
 }
 
 export const LoginPage: React.FC<LoginPageProps> = ({ onNavigate }) => {
-  const { login, switchRole } = useAuth();
+  const { login } = useAuth();
   const { language } = useLanguage();
 
-  const [role, setRole] = useState<UserRole>('citizen');
+  const [activeTab, setActiveTab] = useState<UserRole>('citizen');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [showForgotModal, setShowForgotModal] = useState(false);
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleTabChange = (newTab: UserRole) => {
+    setActiveTab(newTab);
+    setErrorMessage('');
+    setEmail('');
+    setPassword('');
+  };
+
+  const handlePrefillDemo = () => {
+    if (activeTab === 'citizen') {
+      setEmail('citizen@gramapanchayat.in');
+      setPassword('password123');
+    } else if (activeTab === 'worker') {
+      setEmail('worker@gramapanchayat.in');
+      setPassword('password123');
+    } else {
+      setEmail('admin@gramapanchayat.in');
+      setPassword('password123');
+    }
+    setErrorMessage('');
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!email.trim() || !password.trim()) {
+      setErrorMessage(
+        language === 'te'
+          ? 'దయచేసి ఇమెయిల్ మరియు పాస్‌వర్డ్ నమోదు చేయండి.'
+          : 'Please enter your registered email and password.'
+      );
+      return;
+    }
+
     setLoading(true);
-    await login(email || `${role}@gramapanchayat.in`, role);
+    setErrorMessage('');
+
+    const result = await login(email, password, activeTab);
+
     setLoading(false);
-    if (role === 'admin') onNavigate('admin');
-    else if (role === 'worker') onNavigate('worker');
-    else onNavigate('citizen');
+
+    if (!result.success) {
+      setErrorMessage(result.error || 'Authentication failed. Please verify your credentials.');
+      return;
+    }
+
+    // Role-based redirection
+    if (result.role === 'admin') {
+      onNavigate('admin');
+    } else if (result.role === 'worker') {
+      onNavigate('worker');
+    } else {
+      onNavigate('citizen');
+    }
   };
 
-  const handleQuickDemo = (demoRole: UserRole) => {
-    switchRole(demoRole);
-    if (demoRole === 'admin') onNavigate('admin');
-    else if (demoRole === 'worker') onNavigate('worker');
-    else onNavigate('citizen');
-  };
+  const tabs: { id: UserRole; labelEn: string; labelTe: string; icon: React.ReactNode }[] = [
+    {
+      id: 'citizen',
+      labelEn: 'Citizen',
+      labelTe: 'గ్రామస్థుడు',
+      icon: <User className="w-5 h-5" />
+    },
+    {
+      id: 'worker',
+      labelEn: 'Sanitation Worker',
+      labelTe: 'పారిశుద్ధ్య కార్మికుడు',
+      icon: <HardHat className="w-5 h-5" />
+    },
+    {
+      id: 'admin',
+      labelEn: 'Panchayat Admin',
+      labelTe: 'పంచాయతీ అడ్మిన్',
+      icon: <ShieldAlert className="w-5 h-5" />
+    }
+  ];
 
   return (
-    <div className="py-12 max-w-md mx-auto px-4">
-      <div className="bg-white rounded-2xl border border-slate-200 p-7 shadow-lg space-y-6">
+    <div className="py-12 max-w-lg mx-auto px-4">
+      <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 shadow-xl space-y-6">
         
+        {/* Header */}
         <div className="text-center space-y-1">
-          <h2 className="text-2xl font-black text-slate-900">
-            {language === 'te' ? 'వేస్ట్‌వైజ్ లాగిన్' : 'WasteWise Portal Login'}
+          <span className="text-xs font-bold uppercase tracking-wider text-forest-700 bg-forest-100 px-3 py-1 rounded-full">
+            {language === 'te' ? 'కేంద్రీకృత లాగిన్' : 'Unified Public Service Login'}
+          </span>
+          <h2 className="text-2xl sm:text-3xl font-black text-slate-900 mt-2">
+            {language === 'te' ? 'వేస్ట్‌వైజ్ పోర్టల్ లాగిన్' : 'WasteWise Portal Login'}
           </h2>
-          <p className="text-xs text-slate-500">
-            {language === 'te' ? 'మీ ఖాతాలోకి ప్రవేశించండి' : 'Select your role and access your dashboard'}
+          <p className="text-xs sm:text-sm text-slate-500">
+            {language === 'te'
+              ? 'మీ ఖాతా రకాన్ని ఎంచుకుని అధికారిక ఆధారాలతో ప్రవేశించండి'
+              : 'Select your account role and sign in with authorized credentials'}
           </p>
         </div>
 
-        {/* Quick Evaluator One-Click Buttons */}
-        <div className="p-3 bg-forest-50 border border-forest-200 rounded-xl space-y-2">
-          <span className="text-[11px] font-bold text-forest-800 uppercase block tracking-wider">
-            ⚡ Quick 1-Click Demo Login
-          </span>
-          <div className="grid grid-cols-3 gap-1.5">
-            <button
-              onClick={() => handleQuickDemo('citizen')}
-              className="py-1.5 px-2 bg-white hover:bg-forest-100 text-slate-800 rounded-lg text-xs font-bold border border-forest-200 transition"
-            >
-              Citizen
-            </button>
-            <button
-              onClick={() => handleQuickDemo('worker')}
-              className="py-1.5 px-2 bg-white hover:bg-forest-100 text-slate-800 rounded-lg text-xs font-bold border border-forest-200 transition"
-            >
-              Worker
-            </button>
-            <button
-              onClick={() => handleQuickDemo('admin')}
-              className="py-1.5 px-2 bg-white hover:bg-forest-100 text-slate-800 rounded-lg text-xs font-bold border border-forest-200 transition"
-            >
-              Admin
-            </button>
-          </div>
+        {/* 3 Selectable Account Tabs */}
+        <div className="grid grid-cols-3 gap-2 p-1.5 bg-slate-100 rounded-2xl">
+          {tabs.map((tab) => {
+            const isSelected = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => handleTabChange(tab.id)}
+                className={`py-3 px-2 rounded-xl text-xs sm:text-sm font-bold flex flex-col items-center gap-1.5 transition ${
+                  isSelected
+                    ? 'bg-forest-700 text-white shadow-md'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                }`}
+              >
+                {tab.icon}
+                <span className="line-clamp-1">{language === 'te' ? tab.labelTe : tab.labelEn}</span>
+              </button>
+            );
+          })}
         </div>
 
-        {/* Standard Form */}
-        <form onSubmit={handleLogin} className="space-y-4">
+        {/* Role Description Notice */}
+        <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-600 flex items-start gap-2">
+          <AlertCircle className="w-4 h-4 text-forest-700 flex-shrink-0 mt-0.5" />
+          <span>
+            {activeTab === 'citizen' && (
+              language === 'te'
+                ? 'గ్రామస్థుల వేదిక: చెత్త సమస్యలను నివేదించండి, సేకరణ సమయాలు మరియు స్థితిని చూడండి.'
+                : 'Citizen Portal: Report waste dumps, view doorstep collection schedules, and track grievance resolution.'
+            )}
+            {activeTab === 'worker' && (
+              language === 'te'
+                ? 'పారిశుద్ధ్య మిత్రులు: మీకు కేటాయించిన పనులను చూడండి, రోజువారీ తూకం నమోదు చేయండి.'
+                : 'Sanitation Worker Portal: Access assigned cleaning routes, upload completion proofs, and log daily collection weights.'
+            )}
+            {activeTab === 'admin' && (
+              language === 'te'
+                ? 'పంచాయతీ కార్యాలయం: సర్పంచ్ మరియు కార్యదర్శుల కోసం గ్రామ పారిశుద్ధ్య పర్యవేక్షణ.'
+                : 'Panchayat Administrative Console: Official portal for Sarpanch and Panchayat Secretary to manage village sanitation.'
+            )}
+          </span>
+        </div>
+
+        {/* Error Alert */}
+        {errorMessage && (
+          <div className="p-3.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs font-semibold flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
+            <span>{errorMessage}</span>
+          </div>
+        )}
+
+        {/* Dynamic Login Form */}
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="text-xs font-bold text-slate-700 block mb-1">
-              {language === 'te' ? 'మీ పాత్రను ఎంచుకోండి' : 'Select Your Role'}
+              {activeTab === 'citizen'
+                ? (language === 'te' ? 'ఇమెయిల్ చిరునామా' : 'Email Address')
+                : (language === 'te' ? 'నమోదైన అధికారిక ఇమెయిల్' : 'Registered Official Email')}
             </label>
-            <div className="grid grid-cols-3 gap-2">
-              {[
-                { id: 'citizen', labelEn: 'Citizen', icon: <User className="w-3.5 h-3.5" /> },
-                { id: 'worker', labelEn: 'Worker', icon: <HardHat className="w-3.5 h-3.5" /> },
-                { id: 'admin', labelEn: 'Admin', icon: <ShieldAlert className="w-3.5 h-3.5" /> }
-              ].map((r) => (
-                <button
-                  type="button"
-                  key={r.id}
-                  onClick={() => setRole(r.id as UserRole)}
-                  className={`p-2.5 rounded-xl border text-xs font-bold flex flex-col items-center gap-1 transition ${
-                    role === r.id
-                      ? 'border-forest-600 bg-forest-600 text-white shadow-sm'
-                      : 'border-slate-200 hover:bg-slate-50 text-slate-700'
-                  }`}
-                >
-                  {r.icon}
-                  <span>{r.labelEn}</span>
-                </button>
-              ))}
+            <div className="relative">
+              <Mail className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder={
+                  activeTab === 'citizen'
+                    ? 'citizen@gramapanchayat.in'
+                    : activeTab === 'worker'
+                    ? 'worker@gramapanchayat.in'
+                    : 'admin@gramapanchayat.in'
+                }
+                className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-300 rounded-xl text-sm outline-none focus:border-forest-600 focus:bg-white transition"
+              />
             </div>
           </div>
 
           <div>
-            <label className="text-xs font-bold text-slate-700 block mb-1">
-              {language === 'te' ? 'ఇమెయిల్ లేదా ఫోన్' : 'Email Address or Mobile'}
-            </label>
-            <input
-              type="text"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder={`${role}@gramapanchayat.in`}
-              className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-sm outline-none focus:border-forest-600"
-            />
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs font-bold text-slate-700">
+                {language === 'te' ? 'పాస్‌వర్డ్' : 'Password'}
+              </label>
+              {activeTab === 'citizen' && (
+                <button
+                  type="button"
+                  onClick={() => setShowForgotModal(true)}
+                  className="text-[11px] font-bold text-forest-700 hover:underline"
+                >
+                  {language === 'te' ? 'పాస్‌వర్డ్ మర్చిపోయారా?' : 'Forgot password?'}
+                </button>
+              )}
+            </div>
+            <div className="relative">
+              <Lock className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-300 rounded-xl text-sm outline-none focus:border-forest-600 focus:bg-white transition"
+              />
+            </div>
           </div>
 
-          <div>
-            <label className="text-xs font-bold text-slate-700 block mb-1">
-              {language === 'te' ? 'పాస్‌వర్డ్' : 'Password'}
-            </label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-sm outline-none focus:border-forest-600"
-            />
-          </div>
-
+          {/* Submit Button */}
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-forest-600 hover:bg-forest-700 text-white font-bold py-3.5 rounded-xl text-sm transition shadow-md flex items-center justify-center gap-2"
+            className="w-full bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-white font-bold py-3.5 rounded-xl text-sm transition shadow-md flex items-center justify-center gap-2 mt-2"
           >
-            <span>{loading ? 'Logging in...' : language === 'te' ? 'లాగిన్ అవ్వండి' : 'Sign In to Portal'}</span>
+            <span>
+              {loading
+                ? (language === 'te' ? 'ధృవీకరిస్తోంది...' : 'Verifying credentials...')
+                : activeTab === 'citizen'
+                ? (language === 'te' ? 'గ్రామస్థుల లాగిన్' : 'Citizen Sign In')
+                : activeTab === 'worker'
+                ? (language === 'te' ? 'కార్మికుల లాగిన్' : 'Sanitation Worker Sign In')
+                : (language === 'te' ? 'అడ్మిన్ లాగిన్' : 'Panchayat Admin Sign In')}
+            </span>
             <ArrowRight className="w-4 h-4" />
           </button>
         </form>
 
-        <div className="text-center pt-2 text-xs text-slate-500">
-          <span>{language === 'te' ? 'కొత్త ఇంటి నమోదు కొరకా? ' : 'New household in the village? '}</span>
+        {/* Citizen Register Link (Only on Citizen Tab) */}
+        {activeTab === 'citizen' && (
+          <div className="text-center pt-2 text-xs text-slate-500 border-t border-slate-100">
+            <span>{language === 'te' ? 'గ్రామంలో కొత్త ఇల్లా? ' : 'New household in the village? '}</span>
+            <button
+              onClick={() => onNavigate('register')}
+              className="text-forest-700 font-bold hover:underline"
+            >
+              {language === 'te' ? 'ఇంటి నమోదు ఇక్కడ చేయండి' : 'Create Citizen Account'}
+            </button>
+          </div>
+        )}
+
+        {/* Worker & Admin Provisioning Notice */}
+        {(activeTab === 'worker' || activeTab === 'admin') && (
+          <div className="text-center pt-2 text-[11px] text-slate-500 border-t border-slate-100 leading-relaxed">
+            ℹ️ {language === 'te'
+              ? 'పారిశుద్ధ్య కార్మికులు మరియు అడ్మిన్ ఖాతాలు పంచాయతీ కార్యాలయం ద్వారా మాత్రమే సృష్టించబడతాయి.'
+              : 'Sanitation worker & administrator accounts are provisioned exclusively by the Grama Panchayat office.'}
+          </div>
+        )}
+
+        {/* Quick Demo Pre-fill Pill (Evaluator Aid) */}
+        <div className="p-3 bg-forest-50/70 border border-forest-200/80 rounded-xl flex items-center justify-between text-xs">
+          <div className="text-forest-900 font-medium">
+            <span className="font-bold">Test Account: </span>
+            <span className="font-mono">{activeTab}@gramapanchayat.in</span>
+          </div>
           <button
-            onClick={() => onNavigate('register')}
-            className="text-forest-700 font-bold hover:underline"
+            type="button"
+            onClick={handlePrefillDemo}
+            className="bg-white hover:bg-forest-100 text-forest-800 font-bold px-2.5 py-1 rounded-lg border border-forest-300 text-[11px] transition"
           >
-            {language === 'te' ? 'ఇక్కడ నమోదు చేసుకోండి' : 'Register Household here'}
+            Fill Demo
           </button>
         </div>
 
       </div>
+
+      {/* Forgot Password Modal */}
+      {showForgotModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-6 space-y-4 shadow-xl">
+            <h3 className="font-bold text-slate-900 text-base">
+              {language === 'te' ? 'పాస్‌వర్డ్ సహాయం' : 'Password Reset Assistance'}
+            </h3>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              {language === 'te'
+                ? 'గ్రామస్థుల పాస్‌వర్డ్ రీసెట్ కోసం మీ నమోదైన మొబైల్ నంబర్‌తో గ్రామ పంచాయతీ కార్యాలయాన్ని సంప్రదించండి లేదా హెల్ప్‌లైన్ 1800-425-9278 కి కాల్ చేయండి.'
+                : 'For citizen account password recovery, please visit the Grama Panchayat office with your registered mobile phone or contact the toll-free village helpline at 1800-425-9278.'}
+            </p>
+            <div className="pt-2 text-right">
+              <button
+                onClick={() => setShowForgotModal(false)}
+                className="bg-forest-600 text-white font-bold text-xs px-4 py-2 rounded-xl"
+              >
+                {language === 'te' ? 'సరే' : 'Understood'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

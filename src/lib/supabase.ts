@@ -13,7 +13,9 @@ import {
   WasteSchedule,
   CollectionRecord,
   CompostRecord,
-  CitizenFeedback
+  CitizenFeedback,
+  UserProfile,
+  UserRole
 } from '../types';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
@@ -30,12 +32,47 @@ export const supabase = isSupabaseConfigured
   ? createClient(supabaseUrl, supabaseAnonKey)
   : null;
 
+// Default registered profiles for prototype / simulation
+export const SEED_PROFILES: (UserProfile & { passwordHash?: string })[] = [
+  {
+    id: 'cit-1',
+    email: 'citizen@gramapanchayat.in',
+    full_name: 'Ramesh Reddy',
+    role: 'citizen',
+    phone_number: '9848022331',
+    village_ward: 'Ward 1',
+    created_at: '2026-01-01T00:00:00Z',
+    passwordHash: 'password123'
+  },
+  {
+    id: 'worker-1',
+    email: 'worker@gramapanchayat.in',
+    full_name: 'Mallesh (Sanitation Worker)',
+    role: 'worker',
+    phone_number: '9848099887',
+    village_ward: 'Ward 1 & 2',
+    created_at: '2026-01-01T00:00:00Z',
+    passwordHash: 'password123'
+  },
+  {
+    id: 'admin-1',
+    email: 'admin@gramapanchayat.in',
+    full_name: 'Dr. V. Prasad (Panchayat Secretary)',
+    role: 'admin',
+    phone_number: '9848011220',
+    village_ward: 'Central Panchayat Office',
+    created_at: '2026-01-01T00:00:00Z',
+    passwordHash: 'password123'
+  }
+];
+
 // ==============================================================================
 // Unified Village Data Service
 // Operates against live Supabase when env vars are present, or local persistence.
 // ==============================================================================
 
 class VillageDataService {
+  private profilesKey = 'wastewise_profiles';
   private reportsKey = 'wastewise_reports';
   private householdsKey = 'wastewise_households';
   private schedulesKey = 'wastewise_schedules';
@@ -48,6 +85,9 @@ class VillageDataService {
   }
 
   private initLocalStorage() {
+    if (!localStorage.getItem(this.profilesKey)) {
+      localStorage.setItem(this.profilesKey, JSON.stringify(SEED_PROFILES));
+    }
     if (!localStorage.getItem(this.reportsKey)) {
       localStorage.setItem(this.reportsKey, JSON.stringify(INITIAL_REPORTS));
     }
@@ -66,6 +106,50 @@ class VillageDataService {
     if (!localStorage.getItem(this.feedbackKey)) {
       localStorage.setItem(this.feedbackKey, JSON.stringify(INITIAL_FEEDBACK));
     }
+  }
+
+  // --- Profiles & Authentication ---
+  async getProfiles(): Promise<UserProfile[]> {
+    if (isSupabaseConfigured && supabase) {
+      const { data, error } = await supabase.from('profiles').select('*');
+      if (!error && data) return data as UserProfile[];
+    }
+    const raw = localStorage.getItem(this.profilesKey);
+    return raw ? JSON.parse(raw) : SEED_PROFILES;
+  }
+
+  async getProfileByEmail(email: string): Promise<(UserProfile & { passwordHash?: string }) | null> {
+    const cleanEmail = email.trim().toLowerCase();
+    if (isSupabaseConfigured && supabase) {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('email', cleanEmail)
+        .single();
+      if (!error && data) return data as UserProfile;
+    }
+    const raw = localStorage.getItem(this.profilesKey);
+    const profiles: (UserProfile & { passwordHash?: string })[] = raw ? JSON.parse(raw) : SEED_PROFILES;
+    return profiles.find(p => p.email.toLowerCase() === cleanEmail) || null;
+  }
+
+  async addProfile(profile: UserProfile & { passwordHash?: string }): Promise<UserProfile> {
+    const raw = localStorage.getItem(this.profilesKey);
+    const profiles: (UserProfile & { passwordHash?: string })[] = raw ? JSON.parse(raw) : SEED_PROFILES;
+    profiles.push(profile);
+    localStorage.setItem(this.profilesKey, JSON.stringify(profiles));
+
+    if (isSupabaseConfigured && supabase) {
+      await supabase.from('profiles').insert([{
+        id: profile.id,
+        full_name: profile.full_name,
+        email: profile.email,
+        phone_number: profile.phone_number,
+        role: profile.role,
+        village_ward: profile.village_ward
+      }]);
+    }
+    return profile;
   }
 
   // --- Reports / Complaints ---
