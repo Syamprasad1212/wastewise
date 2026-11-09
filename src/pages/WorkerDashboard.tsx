@@ -29,13 +29,16 @@ export const WorkerDashboard: React.FC = () => {
   const [selectedTask, setSelectedTask] = useState<WasteReport | null>(null);
   const [completionNotes, setCompletionNotes] = useState('');
   const [completionPhoto, setCompletionPhoto] = useState('');
+  const [completionPhotoFile, setCompletionPhotoFile] = useState<File | null>(null);
   const [resolving, setResolving] = useState(false);
+  const [taskError, setTaskError] = useState('');
 
   // Mixed waste report state
   const [mixedHouseNo, setMixedHouseNo] = useState('');
   const [mixedWard, setMixedWard] = useState('Ward 1');
   const [mixedNotes, setMixedNotes] = useState('');
   const [mixedReportSuccess, setMixedReportSuccess] = useState(false);
+  const [mixedError, setMixedError] = useState('');
 
   // Daily Waste Quantity Logger state
   const [logDate, setLogDate] = useState(new Date().toISOString().split('T')[0]);
@@ -45,6 +48,9 @@ export const WorkerDashboard: React.FC = () => {
   const [logMixedKg, setLogMixedKg] = useState<number>(15);
   const [logNotes, setLogNotes] = useState('');
   const [logSuccess, setLogSuccess] = useState(false);
+  const [dailyError, setDailyError] = useState('');
+  const [updatingStatusId, setUpdatingStatusId] = useState<string | null>(null);
+  const [submittingDaily, setSubmittingDaily] = useState(false);
 
   useEffect(() => {
     loadWorkerTasks();
@@ -52,25 +58,38 @@ export const WorkerDashboard: React.FC = () => {
 
   const loadWorkerTasks = async () => {
     setLoading(true);
-    const all = await villageDataService.getReports();
-    const workerTasks = all.filter(
-      r => r.assigned_worker_id === user?.id ||
-           r.assigned_worker_name?.toLowerCase().includes('mallesh') ||
-           r.status === 'assigned' ||
-           r.status === 'in_progress'
-    );
-    setReports(workerTasks.length > 0 ? workerTasks : all);
-    setLoading(false);
+    try {
+      const all = await villageDataService.getReports();
+      const workerTasks = all.filter(
+        r => r.assigned_worker_id === user?.id ||
+             r.assigned_worker_name?.toLowerCase().includes('mallesh') ||
+             r.status === 'assigned' ||
+             r.status === 'in_progress'
+      );
+      setReports(workerTasks.length > 0 ? workerTasks : all);
+    } catch (err: any) {
+      console.error('Error loading worker tasks:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleUpdateStatus = async (reportId: string, status: WasteReport['status']) => {
-    await villageDataService.updateReport(reportId, { status });
-    await loadWorkerTasks();
+    setUpdatingStatusId(reportId);
+    try {
+      await villageDataService.updateWorkerTask(reportId, status);
+      await loadWorkerTasks();
+    } catch (err: any) {
+      alert(`Could not update task: ${err.message || err}`);
+    } finally {
+      setUpdatingStatusId(null);
+    }
   };
 
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      setCompletionPhotoFile(file);
       const reader = new FileReader();
       reader.onloadend = () => {
         setCompletionPhoto(reader.result as string);
@@ -84,60 +103,90 @@ export const WorkerDashboard: React.FC = () => {
     if (!selectedTask) return;
 
     setResolving(true);
-    await villageDataService.updateReport(selectedTask.id, {
-      status: 'resolved',
-      completion_notes: completionNotes || 'Cleaned and sanitized by sanitation team.',
-      completion_photo_url: completionPhoto || 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=800&auto=format&fit=crop&q=60'
-    });
+    setTaskError('');
+    try {
+      let finalPhoto = completionPhoto;
+      if (completionPhotoFile && user?.id) {
+        try {
+          finalPhoto = await villageDataService.uploadWastePhoto(completionPhotoFile, user.id);
+        } catch (photoErr: any) {
+          console.warn('Storage upload error, using preview:', photoErr);
+        }
+      }
 
-    setResolving(false);
-    setSelectedTask(null);
-    setCompletionNotes('');
-    setCompletionPhoto('');
-    await loadWorkerTasks();
+      await villageDataService.updateWorkerTask(
+        selectedTask.id,
+        'resolved',
+        completionNotes || 'Cleaned and sanitized by sanitation team.',
+        finalPhoto || 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=800&auto=format&fit=crop&q=60'
+      );
+
+      setSelectedTask(null);
+      setCompletionNotes('');
+      setCompletionPhoto('');
+      setCompletionPhotoFile(null);
+      await loadWorkerTasks();
+    } catch (err: any) {
+      setTaskError(err.message || 'Failed to resolve task.');
+    } finally {
+      setResolving(false);
+    }
   };
 
   const handleLogDailyCollection = async (e: React.FormEvent) => {
     e.preventDefault();
-    await villageDataService.addCollection({
-      date: logDate,
-      ward_number: logWard,
-      worker_id: user?.id || 'worker-1',
-      worker_name: user?.full_name?.split(' ')[0] || 'Mallesh',
-      wet_waste_kg: Number(logWetKg),
-      dry_waste_kg: Number(logDryKg),
-      mixed_waste_kg: Number(logMixedKg),
-      notes: logNotes
-    });
+    setDailyError('');
+    setSubmittingDaily(true);
+    try {
+      await villageDataService.addCollection({
+        date: logDate,
+        ward_number: logWard,
+        worker_id: user?.id || '00000000-0000-0000-0000-000000000002',
+        worker_name: user?.full_name?.split(' ')[0] || 'Mallesh',
+        wet_waste_kg: Number(logWetKg),
+        dry_waste_kg: Number(logDryKg),
+        mixed_waste_kg: Number(logMixedKg),
+        notes: logNotes
+      });
 
-    setLogSuccess(true);
-    setTimeout(() => {
-      setLogSuccess(false);
-      setActiveTab('dashboard');
-    }, 2000);
+      setLogSuccess(true);
+      setTimeout(() => {
+        setLogSuccess(false);
+        setActiveTab('dashboard');
+      }, 2000);
+    } catch (err: any) {
+      setDailyError(err.message || 'Failed to save daily collection.');
+    } finally {
+      setSubmittingDaily(false);
+    }
   };
 
   const handleReportMixedWaste = async (e: React.FormEvent) => {
     e.preventDefault();
-    await villageDataService.addReport({
-      citizen_id: 'auto-reported',
-      citizen_name: `Incident at House ${mixedHouseNo}`,
-      phone_number: 'Panchayat Notice',
-      category: 'mixed',
-      description: `Sanitation Worker reported household failed to segregate waste: ${mixedNotes}`,
-      ward_number: mixedWard,
-      location_address: `Door No ${mixedHouseNo}, ${mixedWard}`,
-      status: 'pending'
-    });
+    setMixedError('');
+    try {
+      await villageDataService.addReport({
+        citizen_id: user?.id || '00000000-0000-0000-0000-000000000002',
+        citizen_name: `Incident at House ${mixedHouseNo}`,
+        phone_number: 'Panchayat Notice',
+        category: 'mixed',
+        description: `Sanitation Worker reported household failed to segregate waste: ${mixedNotes}`,
+        ward_number: mixedWard,
+        location_address: `Door No ${mixedHouseNo}, ${mixedWard}`,
+        status: 'pending'
+      });
 
-    setMixedReportSuccess(true);
-    setTimeout(() => {
-      setMixedReportSuccess(false);
-      setMixedHouseNo('');
-      setMixedNotes('');
-      setActiveTab('tasks');
-    }, 2000);
-    await loadWorkerTasks();
+      setMixedReportSuccess(true);
+      setTimeout(() => {
+        setMixedReportSuccess(false);
+        setMixedHouseNo('');
+        setMixedNotes('');
+        setActiveTab('tasks');
+      }, 2000);
+      await loadWorkerTasks();
+    } catch (err: any) {
+      setMixedError(err.message || 'Failed to submit mixed waste notice.');
+    }
   };
 
   const workerTabs = [
@@ -323,7 +372,20 @@ export const WorkerDashboard: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {reports.map((task) => (
+            {reports.length === 0 ? (
+              <div className="col-span-full text-center py-16 bg-slate-50 rounded-2xl border border-dashed border-slate-300 p-6 space-y-3">
+                <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto" />
+                <h3 className="font-bold text-slate-700 text-sm">
+                  {language === 'te' ? 'కేటాయించిన పనులు లేవు' : 'No Cleaning Tasks Assigned'}
+                </h3>
+                <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                  {language === 'te'
+                    ? 'ప్రస్తుతం మీ పరిధిలో ఎలాంటి పెండింగ్ పనులు లేవు. అన్ని ఫిర్యాదులు పరిష్కరించబడ్డాయి!'
+                    : 'All reported grievances in your ward are currently resolved. Check back when new complaints are assigned.'}
+                </p>
+              </div>
+            ) : (
+              reports.map((task) => (
               <div
                 key={task.id}
                 className={`rounded-2xl border-2 p-5 flex flex-col justify-between transition ${
@@ -385,13 +447,17 @@ export const WorkerDashboard: React.FC = () => {
                     <>
                       <button
                         onClick={() => handleUpdateStatus(task.id, 'in_progress')}
-                        className={`text-xs font-bold px-3 py-1.5 rounded-lg transition ${
+                        disabled={task.status === 'in_progress' || updatingStatusId === task.id}
+                        className={`text-xs font-bold px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 ${
                           task.status === 'in_progress'
                             ? 'bg-purple-600 text-white'
-                            : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-100'
+                            : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 disabled:opacity-50'
                         }`}
                       >
-                        {task.status === 'in_progress' ? 'Working Now...' : 'Start Cleaning'}
+                        {updatingStatusId === task.id && (
+                          <span className="inline-block animate-spin rounded-full h-3 w-3 border-2 border-current border-t-transparent" />
+                        )}
+                        <span>{task.status === 'in_progress' ? 'Working Now...' : 'Start Cleaning'}</span>
                       </button>
 
                       <button
@@ -410,7 +476,7 @@ export const WorkerDashboard: React.FC = () => {
                   )}
                 </div>
               </div>
-            ))}
+            )))}
           </div>
         </div>
       )}
@@ -431,6 +497,13 @@ export const WorkerDashboard: React.FC = () => {
             <div className="p-4 bg-emerald-50 text-emerald-900 border border-emerald-300 rounded-2xl text-xs font-bold flex items-center gap-2">
               <CheckCircle2 className="w-5 h-5 text-emerald-600" />
               <span>{language === 'te' ? 'నేటి రికార్డు విజయవంతంగా నమోదైంది!' : 'Daily collection record saved to village registry!'}</span>
+            </div>
+          )}
+
+          {dailyError && (
+            <div className="p-4 bg-rose-50 text-rose-800 border border-rose-300 rounded-2xl text-xs font-semibold flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-rose-600 flex-shrink-0" />
+              <span>{dailyError}</span>
             </div>
           )}
 
@@ -510,9 +583,17 @@ export const WorkerDashboard: React.FC = () => {
 
             <button
               type="submit"
-              className="w-full bg-forest-600 hover:bg-forest-700 text-white font-bold py-3 rounded-xl text-xs sm:text-sm shadow transition"
+              disabled={submittingDaily}
+              className="w-full bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-white font-bold py-3 rounded-xl text-xs sm:text-sm shadow transition flex items-center justify-center gap-2"
             >
-              {language === 'te' ? 'తూకం సేవ్ చేయండి' : 'Save Daily Collection Entry'}
+              {submittingDaily && (
+                <span className="inline-block animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
+              )}
+              <span>
+                {submittingDaily
+                  ? (language === 'te' ? 'సేవ్ అవుతోంది...' : 'Saving Record...')
+                  : (language === 'te' ? 'తూకం సేవ్ చేయండి' : 'Save Daily Collection Entry')}
+              </span>
             </button>
           </form>
         </div>
@@ -534,6 +615,13 @@ export const WorkerDashboard: React.FC = () => {
             <div className="p-4 bg-rose-50 text-rose-900 border border-rose-300 rounded-2xl text-xs font-bold flex items-center gap-2">
               <CheckCircle2 className="w-5 h-5 text-rose-600" />
               <span>{language === 'te' ? 'నోటీస్ పంచాయతీ కార్యాలయానికి పంపబడింది!' : 'Incident reported to Panchayat Secretary!'}</span>
+            </div>
+          )}
+
+          {mixedError && (
+            <div className="p-4 bg-rose-50 text-rose-800 border border-rose-300 rounded-2xl text-xs font-semibold flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-rose-600 flex-shrink-0" />
+              <span>{mixedError}</span>
             </div>
           )}
 
@@ -601,6 +689,13 @@ export const WorkerDashboard: React.FC = () => {
                 ✕ Close
               </button>
             </div>
+
+            {taskError && (
+              <div className="p-3 bg-rose-50 text-rose-800 border border-rose-300 rounded-xl text-xs font-semibold flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-rose-600 flex-shrink-0" />
+                <span>{taskError}</span>
+              </div>
+            )}
 
             <form onSubmit={handleResolveTask} className="space-y-4">
               <div>

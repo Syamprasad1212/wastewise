@@ -2,14 +2,14 @@ import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { UserRole } from '../types';
-import { User, HardHat, ShieldAlert, ArrowRight, Lock, Mail, AlertCircle, HelpCircle } from 'lucide-react';
+import { User, HardHat, ShieldAlert, ArrowRight, Lock, Mail, AlertCircle, HelpCircle, CheckCircle2 } from 'lucide-react';
 
 interface LoginPageProps {
   onNavigate: (page: string) => void;
 }
 
 export const LoginPage: React.FC<LoginPageProps> = ({ onNavigate }) => {
-  const { login } = useAuth();
+  const { login, authNotice, clearAuthNotice } = useAuth();
   const { language } = useLanguage();
 
   const [activeTab, setActiveTab] = useState<UserRole>('citizen');
@@ -22,6 +22,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigate }) => {
   const handleTabChange = (newTab: UserRole) => {
     setActiveTab(newTab);
     setErrorMessage('');
+    clearAuthNotice();
     setEmail('');
     setPassword('');
   };
@@ -29,13 +30,13 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigate }) => {
   const handlePrefillDemo = () => {
     if (activeTab === 'citizen') {
       setEmail('citizen@gramapanchayat.in');
-      setPassword('password123');
+      setPassword('Demo@123');
     } else if (activeTab === 'worker') {
       setEmail('worker@gramapanchayat.in');
-      setPassword('password123');
+      setPassword('Demo@123');
     } else {
       setEmail('admin@gramapanchayat.in');
-      setPassword('password123');
+      setPassword('Demo@123');
     }
     setErrorMessage('');
   };
@@ -158,10 +159,18 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigate }) => {
         </div>
 
         {/* Error Alert */}
-        {errorMessage && (
+        {(errorMessage || (authNotice?.type === 'error' && !errorMessage)) && (
           <div className="p-3.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs font-semibold flex items-start gap-2">
             <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
-            <span>{errorMessage}</span>
+            <span>{errorMessage || authNotice?.message}</span>
+          </div>
+        )}
+
+        {/* Success Alert (e.g. Email verified) */}
+        {!errorMessage && authNotice?.type === 'success' && (
+          <div className="p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl text-xs font-semibold flex items-start gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
+            <span>{authNotice.message}</span>
           </div>
         )}
 
@@ -266,6 +275,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigate }) => {
           <div className="text-forest-900 font-medium">
             <span className="font-bold">Test Account: </span>
             <span className="font-mono">{activeTab}@gramapanchayat.in</span>
+            <span className="text-slate-500 ml-2 font-normal">(Password: Demo@123)</span>
           </div>
           <button
             type="button"

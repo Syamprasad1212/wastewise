@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { LanguageProvider, useLanguage } from './context/LanguageContext';
 import { AccessibilityProvider } from './context/AccessibilityContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -12,11 +12,11 @@ import { AdminDashboard } from './pages/AdminDashboard';
 import { WorkerDashboard } from './pages/WorkerDashboard';
 import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
-import { Lock, ShieldAlert, ArrowLeft } from 'lucide-react';
+import { Lock, ShieldAlert, ArrowLeft, CheckCircle2, AlertCircle } from 'lucide-react';
 
 const AppContent: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<string>('home');
-  const { user, role } = useAuth();
+  const { user, role, isLoading, authNotice, clearAuthNotice } = useAuth();
   const { language } = useLanguage();
 
   const handleNavigate = (page: string) => {
@@ -24,8 +24,26 @@ const AppContent: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  // If email confirmation succeeds upon callback, open citizen dashboard automatically
+  useEffect(() => {
+    if (authNotice?.type === 'success' && user?.role && (currentPage === 'home' || currentPage === 'login')) {
+      setCurrentPage(user.role);
+    }
+  }, [authNotice, user]);
+
   // Secure Role Protection & Route Guarding
   const renderPage = () => {
+    if (isLoading && ['citizen', 'admin', 'worker'].includes(currentPage)) {
+      return (
+        <div className="py-24 text-center space-y-3">
+          <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-forest-600 border-t-transparent"></div>
+          <p className="text-xs text-slate-500 font-semibold">
+            {language === 'te' ? 'రుజువులను ధృవీకరిస్తోంది...' : 'Verifying secure session credentials...'}
+          </p>
+        </div>
+      );
+    }
+
     switch (currentPage) {
       case 'home':
         return <HomePage onNavigate={handleNavigate} />;
@@ -194,6 +212,58 @@ const AppContent: React.FC = () => {
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 font-sans text-slate-800">
       <Navbar currentPage={currentPage} onNavigate={handleNavigate} />
+
+      {/* Global Authentication / Verification Notice Banner */}
+      {authNotice && (
+        <div
+          role="alert"
+          className={`border-b px-4 py-3 text-xs sm:text-sm font-semibold transition ${
+            authNotice.type === 'error'
+              ? 'bg-rose-50 border-rose-200 text-rose-800'
+              : 'bg-emerald-50 border-emerald-200 text-emerald-900'
+          }`}
+        >
+          <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              {authNotice.type === 'error' ? (
+                <AlertCircle className="w-5 h-5 text-rose-600 flex-shrink-0" />
+              ) : (
+                <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+              )}
+              <span>{authNotice.message}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              {authNotice.type === 'error' && currentPage !== 'login' && (
+                <button
+                  onClick={() => {
+                    handleNavigate('login');
+                    clearAuthNotice();
+                  }}
+                  className="bg-rose-700 hover:bg-rose-800 text-white text-xs font-bold px-3 py-1 rounded-lg transition"
+                >
+                  Go to Login
+                </button>
+              )}
+              {authNotice.type === 'success' && user && currentPage !== user.role && (
+                <button
+                  onClick={() => handleNavigate(user.role)}
+                  className="bg-forest-600 hover:bg-forest-700 text-white text-xs font-bold px-3 py-1 rounded-lg transition"
+                >
+                  Open Dashboard
+                </button>
+              )}
+              <button
+                onClick={clearAuthNotice}
+                aria-label="Dismiss notification"
+                className="text-xs text-slate-500 hover:text-slate-800 font-bold px-1.5 py-0.5 rounded"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <main className="flex-grow">
         {renderPage()}
       </main>

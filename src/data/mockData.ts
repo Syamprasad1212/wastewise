@@ -10,6 +10,7 @@ export const INITIAL_HOUSEHOLDS: Household[] = [
     street_name: 'Bazaar Street / బజార్ వీధి',
     phone_number: '9848022331',
     qr_code_id: 'QR-W1-001',
+    registered_by: '00000000-0000-0000-0000-000000000003',
     created_at: '2026-01-10T09:00:00Z'
   },
   {
@@ -21,6 +22,7 @@ export const INITIAL_HOUSEHOLDS: Household[] = [
     street_name: 'Temple Road / గుడి వీధి',
     phone_number: '9848033442',
     qr_code_id: 'QR-W2-014',
+    registered_by: '00000000-0000-0000-0000-000000000003',
     created_at: '2026-01-11T10:30:00Z'
   },
   {
@@ -32,6 +34,7 @@ export const INITIAL_HOUSEHOLDS: Household[] = [
     street_name: 'School Street / బడి వీధి',
     phone_number: '9848044553',
     qr_code_id: 'QR-W3-022',
+    registered_by: '00000000-0000-0000-0000-000000000003',
     created_at: '2026-01-12T11:00:00Z'
   },
   {
@@ -43,6 +46,7 @@ export const INITIAL_HOUSEHOLDS: Household[] = [
     street_name: 'Panchayat Office Lane / పంచాయతీ కార్యాలయం సందు',
     phone_number: '9848055664',
     qr_code_id: 'QR-W4-005',
+    registered_by: '00000000-0000-0000-0000-000000000003',
     created_at: '2026-01-15T08:30:00Z'
   }
 ];
@@ -216,6 +220,7 @@ export const INITIAL_COMPOST: CompostRecord[] = [
 export const INITIAL_FEEDBACK: CitizenFeedback[] = [
   {
     id: 'fb-1',
+    citizen_id: '00000000-0000-0000-0000-000000000001',
     citizen_name: 'Srinivasulu',
     phone_number: '9848077889',
     ward_number: 'Ward 1',
@@ -225,6 +230,7 @@ export const INITIAL_FEEDBACK: CitizenFeedback[] = [
   },
   {
     id: 'fb-2',
+    citizen_id: '00000000-0000-0000-0000-000000000001',
     citizen_name: 'Padmavathi',
     phone_number: '9848099001',
     ward_number: 'Ward 3',

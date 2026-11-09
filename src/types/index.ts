@@ -19,6 +19,7 @@ export interface Household {
   street_name: string;
   phone_number: string;
   qr_code_id?: string;
+  registered_by?: string;
   created_at: string;
 }
 
@@ -74,7 +75,7 @@ export interface CompostRecord {
   id: string;
   batch_number: string;
   start_date: string;
-  harvest_date: string;
+  harvest_date: string | null;
   wet_waste_input_kg: number;
   compost_produced_kg: number;
   quality_grade: 'Grade A' | 'Grade B' | 'Standard';
@@ -84,6 +85,7 @@ export interface CompostRecord {
 
 export interface CitizenFeedback {
   id: string;
+  citizen_id?: string | null;
   citizen_name: string;
   phone_number: string;
   ward_number: string;

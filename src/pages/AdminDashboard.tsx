@@ -14,6 +14,7 @@ import {
   LayoutDashboard,
   Users,
   AlertCircle,
+  AlertTriangle,
   HardHat,
   Calendar,
   BarChart3,
@@ -24,7 +25,8 @@ import {
   FileSpreadsheet,
   CheckCircle2,
   Clock,
-  Phone
+  Phone,
+  FileText
 } from 'lucide-react';
 
 export const AdminDashboard: React.FC = () => {
@@ -48,6 +50,8 @@ export const AdminDashboard: React.FC = () => {
   const [newHhWard, setNewHhWard] = useState('Ward 1');
   const [newHhStreet, setNewHhStreet] = useState('');
   const [newHhPhone, setNewHhPhone] = useState('');
+  const [householdError, setHouseholdError] = useState('');
+  const [householdSuccess, setHouseholdSuccess] = useState(false);
 
   // New Schedule form state
   const [showAddSchedule, setShowAddSchedule] = useState(false);
@@ -57,17 +61,21 @@ export const AdminDashboard: React.FC = () => {
   const [newSchTime, setNewSchTime] = useState('06:30 AM - 08:30 AM');
   const [newSchWorker, setNewSchWorker] = useState('Mallesh (మల్లేష్)');
   const [newSchVehicle, setNewSchVehicle] = useState('AP-26-TG-1044');
+  const [scheduleError, setScheduleError] = useState('');
+  const [scheduleSuccess, setScheduleSuccess] = useState(false);
 
   // Worker assignment
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
-  const [assignWorkerName, setAssignWorkerName] = useState('Mallesh');
+  const [assignWorkerName, setAssignWorkerName] = useState('Mallesh (మల్లేష్)');
+  const [assignError, setAssignError] = useState('');
+  const [assigningId, setAssigningId] = useState<string | null>(null);
 
-  const workersList = [
-    { name: 'Mallesh (మల్లేష్)', ward: 'Ward 1 & 2', phone: '9848099887', vehicle: 'AP-26-TG-1044', status: 'Active on Route' },
-    { name: 'Koteswara Rao (కోటేశ్వరరావు)', ward: 'Ward 2', phone: '9848099888', vehicle: 'AP-26-TG-1048', status: 'Active on Route' },
-    { name: 'Suresh Kumar (సురేష్)', ward: 'Ward 3', phone: '9848099889', vehicle: 'AP-26-TG-1050', status: 'At Compost Yard' },
-    { name: 'Lakshman (లక్ష్మణ్)', ward: 'Ward 4', phone: '9848099890', vehicle: 'AP-26-TG-1052', status: 'Active on Route' }
-  ];
+  const [workersList, setWorkersList] = useState<any[]>([
+    { id: '00000000-0000-0000-0000-000000000002', name: 'Mallesh (మల్లేష్)', ward: 'Ward 1 & 2', phone: '9848099887', vehicle: 'AP-26-TG-1044', status: 'Active on Route' },
+    { id: '00000000-0000-0000-0000-000000000012', name: 'Koteswara Rao (కోటేశ్వరరావు)', ward: 'Ward 2', phone: '9848099888', vehicle: 'AP-26-TG-1048', status: 'Active on Route' },
+    { id: '00000000-0000-0000-0000-000000000013', name: 'Suresh Kumar (సురేష్)', ward: 'Ward 3', phone: '9848099889', vehicle: 'AP-26-TG-1050', status: 'At Compost Yard' },
+    { id: '00000000-0000-0000-0000-000000000014', name: 'Lakshman (లక్ష్మణ్)', ward: 'Ward 4', phone: '9848099890', vehicle: 'AP-26-TG-1052', status: 'Active on Route' }
+  ]);
 
   useEffect(() => {
     loadAllAdminData();
@@ -75,71 +83,121 @@ export const AdminDashboard: React.FC = () => {
 
   const loadAllAdminData = async () => {
     setLoading(true);
-    const [reps, schs, hhs, cols, cmps, fbs] = await Promise.all([
-      villageDataService.getReports(),
-      villageDataService.getSchedules(),
-      villageDataService.getHouseholds(),
-      villageDataService.getCollections(),
-      villageDataService.getCompost(),
-      villageDataService.getFeedback()
-    ]);
-    setReports(reps);
-    setSchedules(schs);
-    setHouseholds(hhs);
-    setCollections(cols);
-    setComposts(cmps);
-    setFeedback(fbs);
-    setLoading(false);
+    try {
+      const [reps, schs, hhs, cols, cmps, fbs, profs] = await Promise.all([
+        villageDataService.getReports(),
+        villageDataService.getSchedules(),
+        villageDataService.getHouseholds(),
+        villageDataService.getCollections(),
+        villageDataService.getCompost(),
+        villageDataService.getFeedback(),
+        villageDataService.getProfiles()
+      ]);
+      setReports(reps);
+      setSchedules(schs);
+      setHouseholds(hhs);
+      setCollections(cols);
+      setComposts(cmps);
+      setFeedback(fbs);
+
+      // Link real Supabase worker profile IDs to the assignment dropdown
+      const dbWorkers = profs.filter(p => p.role === 'worker');
+      if (dbWorkers.length > 0) {
+        setWorkersList(prev => {
+          return prev.map(w => {
+            const match = dbWorkers.find(
+              dw => dw.full_name?.toLowerCase().includes('mallesh') ||
+                    dw.email?.toLowerCase().includes('worker')
+            );
+            if (match && w.name.includes('Mallesh')) {
+              return { ...w, id: match.id };
+            }
+            return w;
+          });
+        });
+      }
+    } catch (err: any) {
+      console.error('Error loading admin data:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleAssignWorker = async (reportId: string) => {
-    await villageDataService.updateReport(reportId, {
-      status: 'assigned',
-      assigned_worker_id: `worker-${assignWorkerName}`,
-      assigned_worker_name: assignWorkerName
-    });
-    setSelectedReportId(null);
-    await loadAllAdminData();
+    setAssignError('');
+    setAssigningId(reportId);
+    try {
+      const selectedWorker = workersList.find(w => w.name === assignWorkerName) || workersList[0];
+      await villageDataService.updateReport(reportId, {
+        status: 'assigned',
+        assigned_worker_id: selectedWorker.id,
+        assigned_worker_name: selectedWorker.name
+      });
+      setSelectedReportId(null);
+      await loadAllAdminData();
+    } catch (err: any) {
+      setAssignError(err.message || 'Failed to assign worker to complaint.');
+    } finally {
+      setAssigningId(null);
+    }
   };
 
   const handleCreateHousehold = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newHhNumber || !newHhHead || !newHhPhone) return;
+    setHouseholdError('');
+    try {
+      await villageDataService.addHousehold({
+        house_number: newHhNumber,
+        head_of_household: newHhHead,
+        family_members_count: Number(newHhMembers),
+        ward_number: newHhWard,
+        street_name: newHhStreet,
+        phone_number: newHhPhone,
+        qr_code_id: `QR-${newHhWard.replace(' ', '')}-${Math.floor(Math.random() * 800) + 100}`,
+        registered_by: user?.id
+      });
 
-    await villageDataService.addHousehold({
-      house_number: newHhNumber,
-      head_of_household: newHhHead,
-      family_members_count: Number(newHhMembers),
-      ward_number: newHhWard,
-      street_name: newHhStreet,
-      phone_number: newHhPhone,
-      qr_code_id: `QR-${newHhWard.replace(' ', '')}-${Math.floor(Math.random() * 800) + 100}`
-    });
-
-    setNewHhNumber('');
-    setNewHhHead('');
-    setNewHhStreet('');
-    setNewHhPhone('');
-    setShowAddHousehold(false);
-    await loadAllAdminData();
+      setNewHhNumber('');
+      setNewHhHead('');
+      setNewHhStreet('');
+      setNewHhPhone('');
+      setHouseholdSuccess(true);
+      setTimeout(() => {
+        setHouseholdSuccess(false);
+        setShowAddHousehold(false);
+      }, 1500);
+      await loadAllAdminData();
+    } catch (err: any) {
+      setHouseholdError(err.message || 'Failed to register household.');
+    }
   };
 
   const handleCreateSchedule = async (e: React.FormEvent) => {
     e.preventDefault();
-    await villageDataService.addSchedule({
-      ward_number: newSchWard,
-      ward_name: newSchName || `${newSchWard} Area`,
-      ward_name_te: `${newSchWard} ప్రాంతం`,
-      day_of_week: newSchDays,
-      day_of_week_te: newSchDays,
-      collection_time: newSchTime,
-      waste_types: ['wet', 'dry'],
-      worker_name: newSchWorker,
-      vehicle_number: newSchVehicle
-    });
+    setScheduleError('');
+    try {
+      await villageDataService.addSchedule({
+        ward_number: newSchWard,
+        ward_name: newSchName || `${newSchWard} Area`,
+        ward_name_te: `${newSchWard} ప్రాంతం`,
+        day_of_week: newSchDays,
+        day_of_week_te: newSchDays,
+        collection_time: newSchTime,
+        waste_types: ['wet', 'dry'],
+        worker_name: newSchWorker,
+        vehicle_number: newSchVehicle
+      });
 
-    setShowAddSchedule(false);
-    await loadAllAdminData();
+      setScheduleSuccess(true);
+      setTimeout(() => {
+        setScheduleSuccess(false);
+        setShowAddSchedule(false);
+      }, 1500);
+      await loadAllAdminData();
+    } catch (err: any) {
+      setScheduleError(err.message || 'Failed to create collection schedule.');
+    }
   };
 
   // KPI Calculations
@@ -336,8 +394,28 @@ export const AdminDashboard: React.FC = () => {
             </p>
           </div>
 
+          {assignError && (
+            <div className="m-6 p-4 bg-rose-50 border border-rose-300 text-rose-800 rounded-2xl text-xs font-semibold flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-rose-600 flex-shrink-0" />
+              <span>{assignError}</span>
+            </div>
+          )}
+
           <div className="divide-y divide-slate-200">
-            {reports.map((rep) => (
+            {reports.length === 0 ? (
+              <div className="text-center py-16 p-6 space-y-3">
+                <FileText className="w-12 h-12 text-slate-300 mx-auto" />
+                <h3 className="font-bold text-slate-700 text-sm">
+                  {language === 'te' ? 'ఎలాంటి ఫిర్యాదులు లేవు' : 'No Citizen Grievances Logged'}
+                </h3>
+                <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                  {language === 'te'
+                    ? 'గ్రామ ప్రజలు ఫిర్యాదులు చేసినప్పుడు అవి ఇక్కడ కనిపిస్తాయి.'
+                    : 'When citizens submit waste complaints from their portal, they will appear here for worker dispatch.'}
+                </p>
+              </div>
+            ) : (
+              reports.map((rep) => (
               <div key={rep.id} className="p-6 space-y-4 hover:bg-slate-50/60 transition">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                   <div className="flex items-center gap-3">
@@ -418,9 +496,13 @@ export const AdminDashboard: React.FC = () => {
                         </select>
                         <button
                           onClick={() => handleAssignWorker(rep.id)}
-                          className="bg-forest-600 hover:bg-forest-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg"
+                          disabled={assigningId === rep.id}
+                          className="bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-white text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5"
                         >
-                          Confirm
+                          {assigningId === rep.id && (
+                            <span className="inline-block animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent" />
+                          )}
+                          <span>{assigningId === rep.id ? 'Assigning...' : 'Confirm'}</span>
                         </button>
                         <button
                           onClick={() => setSelectedReportId(null)}
@@ -440,7 +522,7 @@ export const AdminDashboard: React.FC = () => {
                   </div>
                 </div>
               </div>
-            ))}
+            )))}
           </div>
         </div>
       )}
@@ -499,6 +581,18 @@ export const AdminDashboard: React.FC = () => {
           {showAddHousehold && (
             <form onSubmit={handleCreateHousehold} className="bg-blue-50 border border-blue-200 p-6 rounded-2xl space-y-4">
               <h3 className="font-bold text-blue-950 text-base">Enroll New Village Household</h3>
+              {householdSuccess && (
+                <div className="p-3 bg-emerald-100 border border-emerald-300 text-emerald-900 rounded-xl text-xs font-bold flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                  <span>Household enrolled successfully!</span>
+                </div>
+              )}
+              {householdError && (
+                <div className="p-3 bg-rose-100 border border-rose-300 text-rose-900 rounded-xl text-xs font-semibold flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-rose-600 flex-shrink-0" />
+                  <span>{householdError}</span>
+                </div>
+              )}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <label className="text-xs font-bold text-slate-700 block mb-1">House Number</label>
@@ -591,20 +685,28 @@ export const AdminDashboard: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {households.map((hh) => (
-                  <tr key={hh.id} className="hover:bg-slate-50">
-                    <td className="p-4 font-mono font-bold text-slate-900">{hh.house_number}</td>
-                    <td className="p-4 font-semibold text-slate-800">{hh.head_of_household}</td>
-                    <td className="p-4 text-slate-600">{hh.ward_number} - {hh.street_name}</td>
-                    <td className="p-4 text-slate-700">{hh.family_members_count} members</td>
-                    <td className="p-4 text-slate-600 font-mono">{hh.phone_number}</td>
-                    <td className="p-4">
-                      <span className="font-mono text-[11px] font-bold bg-emerald-50 text-emerald-800 px-2 py-0.5 rounded border border-emerald-200">
-                        {hh.qr_code_id || 'QR-ASSIGNED'}
-                      </span>
+                {households.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="text-center py-12 text-slate-500 font-medium">
+                      No village households enrolled yet. Click &quot;Enroll New Household&quot; to register one.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  households.map((hh) => (
+                    <tr key={hh.id} className="hover:bg-slate-50">
+                      <td className="p-4 font-mono font-bold text-slate-900">{hh.house_number}</td>
+                      <td className="p-4 font-semibold text-slate-800">{hh.head_of_household}</td>
+                      <td className="p-4 text-slate-600">{hh.ward_number} - {hh.street_name}</td>
+                      <td className="p-4 text-slate-700">{hh.family_members_count} members</td>
+                      <td className="p-4 text-slate-600 font-mono">{hh.phone_number}</td>
+                      <td className="p-4">
+                        <span className="font-mono text-[11px] font-bold bg-emerald-50 text-emerald-800 px-2 py-0.5 rounded border border-emerald-200">
+                          {hh.qr_code_id || 'QR-ASSIGNED'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -633,6 +735,18 @@ export const AdminDashboard: React.FC = () => {
           {showAddSchedule && (
             <form onSubmit={handleCreateSchedule} className="bg-forest-50 border border-forest-200 p-6 rounded-2xl space-y-4">
               <h3 className="font-bold text-forest-900 text-base">Create Collection Route Timing</h3>
+              {scheduleSuccess && (
+                <div className="p-3 bg-emerald-100 border border-emerald-300 text-emerald-900 rounded-xl text-xs font-bold flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                  <span>Collection schedule saved successfully!</span>
+                </div>
+              )}
+              {scheduleError && (
+                <div className="p-3 bg-rose-100 border border-rose-300 text-rose-900 rounded-xl text-xs font-semibold flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-rose-600 flex-shrink-0" />
+                  <span>{scheduleError}</span>
+                </div>
+              )}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <label className="text-xs font-bold text-slate-700 block mb-1">Ward Number</label>
@@ -720,15 +834,23 @@ export const AdminDashboard: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {schedules.map((sch) => (
-                  <tr key={sch.id} className="hover:bg-slate-50">
-                    <td className="p-4 font-bold text-slate-900">{sch.ward_number} - {sch.ward_name}</td>
-                    <td className="p-4 text-slate-700">{sch.day_of_week}</td>
-                    <td className="p-4 font-semibold text-forest-700">{sch.collection_time}</td>
-                    <td className="p-4 text-slate-800">{sch.worker_name}</td>
-                    <td className="p-4 font-mono text-slate-600">{sch.vehicle_number}</td>
+                {schedules.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="text-center py-12 text-slate-500 font-medium">
+                      No collection schedules configured yet. Click &quot;Add Collection Schedule&quot; to create one.
+                    </td>
                   </tr>
-                ))}
+                ) : (
+                  schedules.map((sch) => (
+                    <tr key={sch.id} className="hover:bg-slate-50">
+                      <td className="p-4 font-bold text-slate-900">{sch.ward_number} - {sch.ward_name}</td>
+                      <td className="p-4 text-slate-700">{sch.day_of_week}</td>
+                      <td className="p-4 font-semibold text-forest-700">{sch.collection_time}</td>
+                      <td className="p-4 text-slate-800">{sch.worker_name}</td>
+                      <td className="p-4 font-mono text-slate-600">{sch.vehicle_number}</td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>

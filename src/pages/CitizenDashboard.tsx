@@ -36,13 +36,18 @@ export const CitizenDashboard: React.FC = () => {
   const [locationAddress, setLocationAddress] = useState('');
   const [description, setDescription] = useState('');
   const [photoPreview, setPhotoPreview] = useState<string>('');
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
+  const [submitError, setSubmitError] = useState('');
 
   // Form states for feedback
   const [rating, setRating] = useState(5);
   const [feedbackComment, setFeedbackComment] = useState('');
   const [feedbackSent, setFeedbackSent] = useState(false);
+  const [feedbackError, setFeedbackError] = useState('');
+  const [submittingFeedback, setSubmittingFeedback] = useState(false);
+  const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
     loadData();
@@ -50,18 +55,26 @@ export const CitizenDashboard: React.FC = () => {
 
   const loadData = async () => {
     setLoading(true);
-    const [allReports, allSchedules] = await Promise.all([
-      villageDataService.getReports(),
-      villageDataService.getSchedules()
-    ]);
-    setReports(allReports);
-    setSchedules(allSchedules);
-    setLoading(false);
+    setLoadError('');
+    try {
+      const [allReports, allSchedules] = await Promise.all([
+        villageDataService.getReports(),
+        villageDataService.getSchedules()
+      ]);
+      setReports(allReports);
+      setSchedules(allSchedules);
+    } catch (err: any) {
+      console.error('Error loading data:', err);
+      setLoadError(err.message || 'Unable to load records from database.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      setPhotoFile(file);
       const reader = new FileReader();
       reader.onloadend = () => {
         setPhotoPreview(reader.result as string);
@@ -78,16 +91,26 @@ export const CitizenDashboard: React.FC = () => {
     }
 
     setSubmitting(true);
+    setSubmitError('');
     try {
+      let finalPhotoUrl = photoPreview;
+      if (photoFile && user?.id) {
+        try {
+          finalPhotoUrl = await villageDataService.uploadWastePhoto(photoFile, user.id);
+        } catch (photoErr: any) {
+          console.warn('Storage upload error, using preview:', photoErr);
+        }
+      }
+
       await villageDataService.addReport({
-        citizen_id: user?.id || 'cit-1',
+        citizen_id: user?.id || '00000000-0000-0000-0000-000000000001',
         citizen_name: user?.full_name || 'Village Citizen',
         phone_number: user?.phone_number || '9848022331',
         category,
         description,
         ward_number: wardNumber,
         location_address: locationAddress,
-        photo_url: photoPreview || 'https://images.unsplash.com/photo-1532996122724-e3c354a0b15b?w=800&auto=format&fit=crop&q=60',
+        photo_url: finalPhotoUrl || 'https://images.unsplash.com/photo-1532996122724-e3c354a0b15b?w=800&auto=format&fit=crop&q=60',
         status: 'pending'
       });
 
@@ -95,13 +118,14 @@ export const CitizenDashboard: React.FC = () => {
       setDescription('');
       setLocationAddress('');
       setPhotoPreview('');
+      setPhotoFile(null);
       await loadData();
       setTimeout(() => {
         setSubmitSuccess(false);
         setActiveTab('complaints');
       }, 2000);
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      setSubmitError(err.message || 'Failed to submit grievance.');
     } finally {
       setSubmitting(false);
     }
@@ -111,17 +135,26 @@ export const CitizenDashboard: React.FC = () => {
     e.preventDefault();
     if (!feedbackComment.trim()) return;
 
-    await villageDataService.addFeedback({
-      citizen_name: user?.full_name || 'Citizen',
-      phone_number: user?.phone_number || '9848000000',
-      ward_number: wardNumber,
-      rating,
-      comment: feedbackComment
-    });
+    setSubmittingFeedback(true);
+    setFeedbackError('');
+    try {
+      await villageDataService.addFeedback({
+        citizen_id: user?.id || '00000000-0000-0000-0000-000000000001',
+        citizen_name: user?.full_name || 'Citizen',
+        phone_number: user?.phone_number || '9848000000',
+        ward_number: wardNumber,
+        rating,
+        comment: feedbackComment
+      });
 
-    setFeedbackSent(true);
-    setFeedbackComment('');
-    setTimeout(() => setFeedbackSent(false), 4000);
+      setFeedbackSent(true);
+      setFeedbackComment('');
+      setTimeout(() => setFeedbackSent(false), 4000);
+    } catch (err: any) {
+      setFeedbackError(err.message || 'Failed to submit feedback.');
+    } finally {
+      setSubmittingFeedback(false);
+    }
   };
 
   const getStatusBadge = (status: WasteReport['status']) => {
@@ -341,6 +374,13 @@ export const CitizenDashboard: React.FC = () => {
             </div>
           )}
 
+          {submitError && (
+            <div className="mb-6 p-4 rounded-xl bg-rose-50 border border-rose-300 text-rose-900 text-sm font-semibold flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-rose-600 flex-shrink-0" />
+              <span>{submitError}</span>
+            </div>
+          )}
+
           <form onSubmit={handleSubmitComplaint} className="space-y-5">
             {/* Category */}
             <div>
@@ -381,6 +421,9 @@ export const CitizenDashboard: React.FC = () => {
                   onChange={(e) => setWardNumber(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm font-semibold text-slate-800 outline-none focus:border-forest-600"
                 >
+                  {user?.village_ward && !['Ward 1', 'Ward 2', 'Ward 3', 'Ward 4'].includes(user.village_ward) && (
+                    <option value={user.village_ward}>{user.village_ward} (My Registered Locality)</option>
+                  )}
                   <option value="Ward 1">Ward 1 (Bazaar Area / బజార్ వీధి)</option>
                   <option value="Ward 2">Ward 2 (Temple Street / గుడి వీధి)</option>
                   <option value="Ward 3">Ward 3 (School Zone / బడి వీధి)</option>
@@ -492,7 +535,26 @@ export const CitizenDashboard: React.FC = () => {
           </div>
 
           <div className="space-y-4">
-            {reports.map((rep) => (
+            {reports.length === 0 ? (
+              <div className="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-300 p-6 space-y-3">
+                <FileText className="w-12 h-12 text-slate-300 mx-auto" />
+                <h3 className="font-bold text-slate-700 text-sm">
+                  {language === 'te' ? 'ఇంకా ఎలాంటి ఫిర్యాదులు నమోదు కాలేదు' : 'No Grievances Reported Yet'}
+                </h3>
+                <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                  {language === 'te'
+                    ? 'మీ వీధిలో లేదా గ్రామంలో పేరుకుపోయిన చెత్తను నివేదించడానికి పైనున్న బటన్ క్లిక్ చేయండి.'
+                    : 'Report waste dumps or overflowing bins in your ward to alert Panchayat sanitation workers.'}
+                </p>
+                <button
+                  onClick={() => setActiveTab('report')}
+                  className="bg-forest-600 hover:bg-forest-700 text-white font-bold text-xs px-4 py-2 rounded-xl transition"
+                >
+                  + {language === 'te' ? 'చెత్త సమస్య నివేదించండి' : 'Report Waste Issue'}
+                </button>
+              </div>
+            ) : (
+              reports.map((rep) => (
               <div
                 key={rep.id}
                 className="p-5 rounded-2xl border border-slate-200 bg-slate-50 space-y-3"
@@ -550,7 +612,7 @@ export const CitizenDashboard: React.FC = () => {
                   </div>
                 )}
               </div>
-            ))}
+            )))}
           </div>
         </div>
       )}
@@ -613,6 +675,13 @@ export const CitizenDashboard: React.FC = () => {
             </div>
           )}
 
+          {feedbackError && (
+            <div className="p-4 bg-rose-50 text-rose-900 border border-rose-300 rounded-2xl text-xs font-bold flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-rose-600" />
+              <span>{feedbackError}</span>
+            </div>
+          )}
+
           <form onSubmit={handleSubmitFeedback} className="space-y-5">
             <div>
               <label className="text-xs font-bold text-slate-700 block mb-2">
@@ -657,9 +726,17 @@ export const CitizenDashboard: React.FC = () => {
 
             <button
               type="submit"
-              className="bg-forest-600 hover:bg-forest-700 text-white text-sm font-bold px-6 py-3 rounded-xl transition shadow"
+              disabled={submittingFeedback}
+              className="bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-white text-sm font-bold px-6 py-3 rounded-xl transition shadow flex items-center justify-center gap-2"
             >
-              {language === 'te' ? 'అభిప్రాయం సమర్పించండి' : 'Submit Feedback'}
+              {submittingFeedback && (
+                <span className="inline-block animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
+              )}
+              <span>
+                {submittingFeedback
+                  ? (language === 'te' ? 'సమర్పిస్తోంది...' : 'Submitting Feedback...')
+                  : (language === 'te' ? 'అభిప్రాయం సమర్పించండి' : 'Submit Feedback')}
+              </span>
             </button>
           </form>
         </div>
